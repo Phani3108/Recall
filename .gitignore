@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build outputs
+.next/
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Docker
+*.log
+
+# Python
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+
+# Testing
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.deepeval/
+
+# Misc
+*.swp
+*.swo
