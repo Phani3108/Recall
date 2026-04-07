@@ -306,8 +306,15 @@ export const integrations = {
     apiFetch<{ status: string; provider: string }>(`/integrations/${id}/status`),
   delete: (id: string) =>
     apiFetch<void>(`/integrations/${id}`, { method: "DELETE" }),
+  oauthUrl: (provider: string) =>
+    apiFetch<{ auth_url: string }>(`/integrations/${provider}/oauth-url`),
   providerFields: () =>
-    apiFetch<Record<string, { fields: Array<{ key: string; label: string; placeholder: string }>; help_url: string }>>("/integrations/providers/fields"),
+    apiFetch<Record<string, {
+      fields: Array<{ key: string; label: string; placeholder: string }>;
+      help_url: string;
+      auth_method: "oauth" | "api_key" | "coming_soon";
+      oauth_configured: boolean;
+    }>>("/integrations/providers/fields"),
 };
 
 // ── Context ──

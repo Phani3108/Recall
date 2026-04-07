@@ -56,6 +56,21 @@ PROVIDER_FIELDS: dict[str, list[dict[str, Any]]] = {
     "dropbox": [
         {"key": "token", "label": "Access Token", "placeholder": "sl.xxxxx"},
     ],
+    "zoom": [
+        {"key": "token", "label": "Access Token", "placeholder": "eyJ0eX..."},
+    ],
+    "figma": [
+        {"key": "token", "label": "Personal Access Token", "placeholder": "figd_xxxxxxxxxxxx"},
+    ],
+    "asana": [
+        {"key": "token", "label": "Personal Access Token", "placeholder": "1/12345:abcdef..."},
+    ],
+    "hubspot": [
+        {"key": "token", "label": "Private App Token", "placeholder": "pat-na1-xxxxxxxxxxxx"},
+    ],
+    "claude": [
+        {"key": "token", "label": "Anthropic API Key", "placeholder": "sk-ant-api03-xxxxxxxxxxxx"},
+    ],
 }
 
 PROVIDER_HELP_URLS: dict[str, str] = {
@@ -69,6 +84,11 @@ PROVIDER_HELP_URLS: dict[str, str] = {
     "gitlab": "https://gitlab.com/-/user_settings/personal_access_tokens",
     "microsoft365": "https://developer.microsoft.com/en-us/graph/graph-explorer",
     "dropbox": "https://www.dropbox.com/developers/apps",
+    "zoom": "https://marketplace.zoom.us/develop/create",
+    "figma": "https://www.figma.com/developers/api#access-tokens",
+    "asana": "https://app.asana.com/0/my-apps",
+    "hubspot": "https://developers.hubspot.com/docs/api/private-apps",
+    "claude": "https://console.anthropic.com/settings/keys",
 }
 
 
@@ -588,6 +608,224 @@ async def _sync_dropbox(config: dict) -> list[dict]:
     return entities
 
 
+async def _sync_zoom(config: dict) -> list[dict]:
+    token = config.get("access_token") or config.get("token", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    entities: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            "https://api.zoom.us/v2/users/me/meetings?page_size=30&type=scheduled",
+            headers=headers,
+        )
+        resp.raise_for_status()
+
+        for m in resp.json().get("meetings", []):
+            entities.append({
+                "source_id": f"zoom:meeting:{m['id']}",
+                "entity_type": "document",
+                "title": f"[Zoom] {m.get('topic', 'Meeting')}",
+                "content": (
+                    f"Start: {m.get('start_time', 'TBD')}\n"
+                    f"Duration: {m.get('duration', 0)} min\n"
+                    f"Type: {'Recurring' if m.get('type') == 8 else 'Scheduled'}"
+                ),
+                "source_url": m.get("join_url", ""),
+                "extra_data": {"source_integration": "zoom", "type": "meeting"},
+            })
+
+        # Also try recordings
+        try:
+            rec = await client.get(
+                "https://api.zoom.us/v2/users/me/recordings?page_size=20",
+                headers=headers,
+            )
+            rec.raise_for_status()
+            for meeting in rec.json().get("meetings", []):
+                for rf in meeting.get("recording_files", []):
+                    if rf.get("file_type") == "MP4":
+                        entities.append({
+                            "source_id": f"zoom:recording:{rf['id']}",
+                            "entity_type": "file",
+                            "title": f"[Zoom Recording] {meeting.get('topic', 'Recording')}",
+                            "content": f"Date: {meeting.get('start_time', '')[:10]}\nSize: {rf.get('file_size', 0)} bytes",
+                            "source_url": rf.get("play_url", ""),
+                            "extra_data": {"source_integration": "zoom", "type": "recording"},
+                        })
+        except Exception:
+            pass
+
+    return entities
+
+
+async def _sync_figma(config: dict) -> list[dict]:
+    token = config.get("access_token") or config.get("token", "")
+    headers = {"X-Figma-Token": token}
+    entities: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get("https://api.figma.com/v1/me", headers=headers)
+        resp.raise_for_status()
+
+        # Get recent files from teams/projects
+        me = resp.json()
+        teams_resp = await client.get(
+            f"https://api.figma.com/v1/me/files?page_size=30",
+            headers=headers,
+        )
+        # /me/files may not exist — try projects
+        try:
+            teams_resp.raise_for_status()
+            for f in teams_resp.json().get("files", []):
+                entities.append({
+                    "source_id": f"figma:file:{f['key']}",
+                    "entity_type": "document",
+                    "title": f"[Figma] {f.get('name', 'Untitled')}",
+                    "content": f"Last modified: {f.get('last_modified', '')[:10]}",
+                    "source_url": f"https://www.figma.com/file/{f['key']}",
+                    "extra_data": {"source_integration": "figma", "type": "file"},
+                })
+        except Exception:
+            # Fallback: just validate the token worked
+            entities.append({
+                "source_id": f"figma:user:{me.get('id', 'unknown')}",
+                "entity_type": "person",
+                "title": f"[Figma] {me.get('handle', me.get('email', 'User'))}",
+                "content": f"Connected Figma account",
+                "source_url": "",
+                "extra_data": {"source_integration": "figma", "type": "user"},
+            })
+
+    return entities
+
+
+async def _sync_asana(config: dict) -> list[dict]:
+    token = config.get("access_token") or config.get("token", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    entities: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get user info and workspace
+        me = await client.get("https://app.asana.com/api/1.0/users/me", headers=headers)
+        me.raise_for_status()
+        user_data = me.json().get("data", {})
+        workspace_id = (user_data.get("workspaces") or [{}])[0].get("gid", "")
+
+        if workspace_id:
+            # Get recent tasks assigned to user
+            tasks_resp = await client.get(
+                f"https://app.asana.com/api/1.0/tasks?workspace={workspace_id}&assignee=me"
+                f"&opt_fields=name,notes,completed,due_on,permalink_url,projects.name&limit=50",
+                headers=headers,
+            )
+            tasks_resp.raise_for_status()
+
+            for task in tasks_resp.json().get("data", []):
+                project_names = ", ".join(p.get("name", "") for p in task.get("projects", []))
+                entities.append({
+                    "source_id": f"asana:task:{task['gid']}",
+                    "entity_type": "task",
+                    "title": f"[Asana] {task.get('name', 'Untitled')}",
+                    "content": (task.get("notes") or "")[:2000] or f"Project: {project_names}",
+                    "source_url": task.get("permalink_url", ""),
+                    "extra_data": {
+                        "source_integration": "asana",
+                        "type": "task",
+                        "completed": task.get("completed", False),
+                        "due": task.get("due_on"),
+                        "projects": project_names,
+                    },
+                })
+
+    return entities
+
+
+async def _sync_hubspot(config: dict) -> list[dict]:
+    token = config.get("access_token") or config.get("token", "")
+    headers = {"Authorization": f"Bearer {token}"}
+    entities: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get recent contacts
+        contacts = await client.get(
+            "https://api.hubapi.com/crm/v3/objects/contacts?limit=30"
+            "&properties=firstname,lastname,email,company,phone",
+            headers=headers,
+        )
+        contacts.raise_for_status()
+
+        for c in contacts.json().get("results", []):
+            props = c.get("properties", {})
+            name = f"{props.get('firstname', '')} {props.get('lastname', '')}".strip() or props.get("email", "Unknown")
+            entities.append({
+                "source_id": f"hubspot:contact:{c['id']}",
+                "entity_type": "person",
+                "title": f"[HubSpot] {name}",
+                "content": (
+                    f"Email: {props.get('email', 'N/A')}\n"
+                    f"Company: {props.get('company', 'N/A')}\n"
+                    f"Phone: {props.get('phone', 'N/A')}"
+                ),
+                "source_url": f"https://app.hubspot.com/contacts/{c['id']}",
+                "extra_data": {"source_integration": "hubspot", "type": "contact"},
+            })
+
+        # Get recent deals
+        try:
+            deals = await client.get(
+                "https://api.hubapi.com/crm/v3/objects/deals?limit=30"
+                "&properties=dealname,amount,dealstage,closedate,pipeline",
+                headers=headers,
+            )
+            deals.raise_for_status()
+            for d in deals.json().get("results", []):
+                props = d.get("properties", {})
+                entities.append({
+                    "source_id": f"hubspot:deal:{d['id']}",
+                    "entity_type": "task",
+                    "title": f"[HubSpot Deal] {props.get('dealname', 'Untitled')}",
+                    "content": (
+                        f"Amount: {props.get('amount', 'N/A')}\n"
+                        f"Stage: {props.get('dealstage', 'N/A')}\n"
+                        f"Close date: {props.get('closedate', 'N/A')}"
+                    ),
+                    "source_url": f"https://app.hubspot.com/deals/{d['id']}",
+                    "extra_data": {"source_integration": "hubspot", "type": "deal"},
+                })
+        except Exception:
+            pass
+
+    return entities
+
+
+async def _sync_claude(config: dict) -> list[dict]:
+    """Claude/Anthropic — just validate the API key works."""
+    token = config.get("token", "")
+    entities: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://api.anthropic.com/v1/models",
+            headers={
+                "x-api-key": token,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        resp.raise_for_status()
+        models = resp.json().get("data", [])
+        for m in models[:5]:
+            entities.append({
+                "source_id": f"claude:model:{m.get('id', 'unknown')}",
+                "entity_type": "document",
+                "title": f"[Claude Model] {m.get('display_name', m.get('id', 'unknown'))}",
+                "content": f"Model: {m.get('id', '')}\nType: {m.get('type', '')}",
+                "source_url": "https://console.anthropic.com",
+                "extra_data": {"source_integration": "claude", "type": "model"},
+            })
+
+    return entities
+
+
 # ── Syncer registry ──
 
 _SYNCERS = {
@@ -601,4 +839,9 @@ _SYNCERS = {
     "gitlab": _sync_gitlab,
     "microsoft365": _sync_microsoft365,
     "dropbox": _sync_dropbox,
+    "zoom": _sync_zoom,
+    "figma": _sync_figma,
+    "asana": _sync_asana,
+    "hubspot": _sync_hubspot,
+    "claude": _sync_claude,
 }

@@ -32,6 +32,13 @@ class IntegrationProvider(str, enum.Enum):
     GITLAB = "gitlab"
     MICROSOFT365 = "microsoft365"
     DROPBOX = "dropbox"
+    ZOOM = "zoom"
+    FIGMA = "figma"
+    ASANA = "asana"
+    HUBSPOT = "hubspot"
+    CLAUDE = "claude"
+    WHATSAPP = "whatsapp"
+    CURSOR = "cursor"
 
 
 class IntegrationStatus(str, enum.Enum):
