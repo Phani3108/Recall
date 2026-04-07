@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db, async_session_factory
-from app.db.models import Conversation, Message, AuditLog, AuditAction
+from app.db.models import Conversation, Message, AuditLog, AuditAction, Organization
 from app.api.deps import get_org_context, OrgContext
 from app.api.schemas import (
     ConversationCreate,
@@ -169,12 +169,17 @@ async def send_message(
         if m.id != user_msg.id  # exclude the just-added user msg (it's passed separately)
     ]
 
-    # Call RAG pipeline
+    # Call RAG pipeline (use org's OpenAI key if available)
+    org_result = await db.execute(select(Organization).where(Organization.id == ctx.org_id))
+    org = org_result.scalar_one_or_none()
+    openai_key = (org.platform_keys or {}).get("openai", "") if org else ""
+
     chat_response = await chat(
         user_query=req.content,
         conversation_history=history,
         org_id=ctx.org_id,
         user_id=ctx.user_id,
+        api_key=openai_key or None,
     )
 
     # Store assistant response
@@ -287,6 +292,11 @@ async def send_message_stream(
         if m.id != user_msg.id
     ]
 
+    # Get org's OpenAI key for streaming
+    org_result = await db.execute(select(Organization).where(Organization.id == ctx.org_id))
+    org = org_result.scalar_one_or_none()
+    openai_key = (org.platform_keys or {}).get("openai", "") if org else ""
+
     async def event_generator():
         full_content = ""
         model_used = "mock-mode"
@@ -297,6 +307,7 @@ async def send_message_stream(
             conversation_history=history,
             org_id=ctx.org_id,
             user_id=ctx.user_id,
+            api_key=openai_key or None,
         ):
             yield chunk
 

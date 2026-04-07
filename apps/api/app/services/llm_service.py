@@ -35,8 +35,10 @@ Rules:
 """
 
 
-def _is_mock_mode() -> bool:
+def _is_mock_mode(api_key: str | None = None) -> bool:
     """Check if we should use mock mode (no real LLM API key configured)."""
+    if api_key:
+        return False
     return not settings.openai_api_key and not settings.anthropic_api_key
 
 
@@ -184,8 +186,22 @@ async def _call_llm(
     model: str = DEFAULT_MODEL,
     temperature: float = 0.3,
     max_tokens: int = 4096,
+    api_key: str | None = None,
 ) -> dict:
-    """Call LLM via LiteLLM proxy."""
+    """Call LLM — direct OpenAI if api_key provided, otherwise LiteLLM proxy."""
+    key = api_key or settings.openai_api_key
+    if key:
+        # Direct OpenAI API call
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    # Fallback: LiteLLM proxy
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
             f"{settings.litellm_proxy_url}/chat/completions",
@@ -240,6 +256,7 @@ async def chat(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     model: str = DEFAULT_MODEL,
+    api_key: str | None = None,
 ) -> ChatResponse:
     """Full RAG pipeline: search context → augment prompt → call LLM → return attributed response.
 
@@ -264,7 +281,7 @@ async def chat(
         logger.warning("Context search failed, proceeding without context", exc_info=True)
 
     # Mock mode: return realistic response without calling LLM
-    if _is_mock_mode():
+    if _is_mock_mode(api_key):
         logger.info("Mock mode active (no API key configured)")
         content, sources = _generate_mock_response(user_query, search_results)
         latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -300,7 +317,7 @@ async def chat(
 
     # Step 3: Call LLM
     try:
-        llm_response = await _call_llm(messages, model=model)
+        llm_response = await _call_llm(messages, model=model, api_key=api_key)
     except httpx.HTTPStatusError as e:
         logger.error("LLM call failed: %s", e.response.text)
         return ChatResponse(
@@ -380,6 +397,7 @@ async def chat_stream(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     model: str = DEFAULT_MODEL,
+    api_key: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Streaming version of chat — yields SSE-formatted chunks.
 
@@ -414,7 +432,7 @@ async def chat_stream(
     yield f"event: sources\ndata: {json.dumps(sources)}\n\n"
 
     # Mock mode: simulate streaming by yielding word-by-word
-    if _is_mock_mode():
+    if _is_mock_mode(api_key):
         content, _ = _generate_mock_response(user_query, search_results)
         words = content.split(" ")
         for i, word in enumerate(words):
@@ -426,7 +444,7 @@ async def chat_stream(
         yield f"event: done\ndata: {json.dumps({'model': 'mock-mode', 'tokens_total': len(words) * 2, 'latency_ms': latency_ms, 'cost_usd': 0.0})}\n\n"
         return
 
-    # Real LLM: stream from LiteLLM proxy
+    # Real LLM: stream from OpenAI (direct or via LiteLLM proxy)
     context_block = _build_context_block(search_results)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -436,15 +454,20 @@ async def chat_stream(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_query})
 
+    key = api_key or settings.openai_api_key
+    if key:
+        base_url = "https://api.openai.com/v1"
+        auth_header = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    else:
+        base_url = settings.litellm_proxy_url
+        auth_header = {"Authorization": f"Bearer {settings.litellm_master_key}", "Content-Type": "application/json"}
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
-                f"{settings.litellm_proxy_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.litellm_master_key}",
-                    "Content-Type": "application/json",
-                },
+                f"{base_url}/chat/completions",
+                headers=auth_header,
                 json={
                     "model": model,
                     "messages": messages,

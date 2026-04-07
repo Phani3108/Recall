@@ -289,8 +289,13 @@ export const integrations = {
       method: "POST",
       body: JSON.stringify({ provider }),
     }),
-  connect: (id: string) =>
-    apiFetch<{ redirect_url: string }>(`/integrations/${id}/connect`, {
+  connect: (id: string, config: Record<string, string>) =>
+    apiFetch<{ status: string; synced: number; error: string | null }>(`/integrations/${id}/connect`, {
+      method: "POST",
+      body: JSON.stringify({ config }),
+    }),
+  sync: (id: string) =>
+    apiFetch<{ status: string; synced: number; error: string | null }>(`/integrations/${id}/sync`, {
       method: "POST",
     }),
   disconnect: (id: string) =>
@@ -301,6 +306,8 @@ export const integrations = {
     apiFetch<{ status: string; provider: string }>(`/integrations/${id}/status`),
   delete: (id: string) =>
     apiFetch<void>(`/integrations/${id}`, { method: "DELETE" }),
+  providerFields: () =>
+    apiFetch<Record<string, { fields: Array<{ key: string; label: string; placeholder: string }>; help_url: string }>>("/integrations/providers/fields"),
 };
 
 // ── Context ──

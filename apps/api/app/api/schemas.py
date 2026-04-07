@@ -87,6 +87,10 @@ class IntegrationCreate(BaseModel):
     provider: str
 
 
+class IntegrationConnect(BaseModel):
+    config: dict[str, str]  # e.g., {"token": "ghp_..."} or {"email": "...", "token": "...", "domain": "..."}
+
+
 class IntegrationResponse(BaseModel):
     id: uuid.UUID
     provider: str
