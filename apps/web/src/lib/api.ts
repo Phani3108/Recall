@@ -35,6 +35,7 @@ export interface User {
   name: string;
   avatar_url: string | null;
   is_active: boolean;
+  role: string | null;
   created_at: string;
 }
 
@@ -462,4 +463,92 @@ export const users = {
       method: "PATCH",
       body: JSON.stringify(updates),
     }),
+  deleteMe: () =>
+    apiFetch<void>("/users/me", { method: "DELETE" }),
+};
+
+// ── Org Settings (API Keys / License) ──
+
+export interface PlatformKeys {
+  openai_api_key: string | null;
+  anthropic_api_key: string | null;
+  composio_api_key: string | null;
+}
+
+export interface LicenseInfo {
+  tier: string;
+  license_key_set: boolean;
+  valid_until: string | null;
+}
+
+export interface OrgSettings {
+  id: string;
+  name: string;
+  slug: string;
+  license: LicenseInfo;
+  platform_keys: PlatformKeys;
+  token_budget_monthly: number | null;
+  tokens_used_this_month: number;
+}
+
+export const orgSettings = {
+  get: () => apiFetch<OrgSettings>("/orgs/settings"),
+
+  updatePlatformKeys: (keys: { openai_api_key?: string; anthropic_api_key?: string; composio_api_key?: string }) =>
+    apiFetch<{ status: string; platform_keys: PlatformKeys }>("/orgs/settings/platform-keys", {
+      method: "PUT",
+      body: JSON.stringify(keys),
+    }),
+
+  removePlatformKey: (keyName: string) =>
+    apiFetch<{ status: string }>(`/orgs/settings/platform-keys/${keyName}`, {
+      method: "DELETE",
+    }),
+
+  activateLicense: (licenseKey: string) =>
+    apiFetch<LicenseInfo>("/orgs/settings/activate-license", {
+      method: "POST",
+      body: JSON.stringify({ license_key: licenseKey }),
+    }),
+};
+
+// ── Admin ──
+
+export interface AdminOverview {
+  total_users: number;
+  total_orgs: number;
+  total_conversations: number;
+  total_tokens_used: number;
+  total_cost_usd: number;
+  total_integrations: number;
+  total_tasks: number;
+  total_delegations: number;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminActivityRow {
+  id: string;
+  user_email: string | null;
+  user_name: string | null;
+  action: string;
+  resource_type: string | null;
+  detail: Record<string, unknown>;
+  tokens_consumed: number;
+  cost_usd: number;
+  created_at: string;
+}
+
+export const admin = {
+  overview: () => apiFetch<AdminOverview>("/admin/overview"),
+  users: () => apiFetch<AdminUserRow[]>("/admin/users"),
+  activity: (limit = 100, offset = 0) =>
+    apiFetch<AdminActivityRow[]>(`/admin/activity?limit=${limit}&offset=${offset}`),
 };

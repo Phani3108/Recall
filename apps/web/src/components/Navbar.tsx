@@ -45,6 +45,12 @@ export default function Navbar() {
 
         {/* CTA */}
         <div className="hidden items-center gap-4 md:flex">
+          <Link
+            href="/login"
+            className="text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+          >
+            Sign In
+          </Link>
           <a
             href="#waitlist"
             className="rounded-lg bg-gradient-to-r from-[var(--color-accent-gradient-start)] to-[var(--color-accent-gradient-end)] px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
@@ -76,6 +82,13 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
+          <Link
+            href="/login"
+            className="block py-3 text-[var(--color-text-secondary)]"
+            onClick={() => setIsOpen(false)}
+          >
+            Sign In
+          </Link>
           <a
             href="#waitlist"
             className="mt-4 block rounded-lg bg-gradient-to-r from-[var(--color-accent-gradient-start)] to-[var(--color-accent-gradient-end)] px-5 py-2.5 text-center text-sm font-medium text-white"

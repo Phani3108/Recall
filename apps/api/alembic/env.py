@@ -10,10 +10,13 @@ from app.config import settings
 config = context.config
 
 # Override sqlalchemy.url from app settings (sync driver for Alembic)
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.database_url.replace("+asyncpg", ""),
-)
+sync_url = settings.database_url
+# Ensure we use a sync driver for Alembic
+if "+asyncpg" in sync_url:
+    sync_url = sync_url.replace("+asyncpg", "")
+elif sync_url.startswith("postgres://"):
+    sync_url = sync_url.replace("postgres://", "postgresql://", 1)
+config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

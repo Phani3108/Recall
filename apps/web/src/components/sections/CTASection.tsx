@@ -1,17 +1,40 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, Shield, Download, Server } from 'lucide-react';
+import { ArrowRight, Shield, Download, Server, Loader2 } from 'lucide-react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 export default function CTASection() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [position, setPosition] = useState<number | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    // TODO: Submit to API / Supabase
-    setSubmitted(true);
+    if (!email || submitting) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/waitlist/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || 'Something went wrong. Please try again.');
+        return;
+      }
+      setPosition(data.position);
+      setSubmitted(true);
+    } catch {
+      setError('Could not reach the server. Please try again later.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -30,7 +53,7 @@ export default function CTASection() {
           <div className="mx-auto mt-10 max-w-md rounded-2xl border border-[var(--color-success)]/30 bg-[var(--color-success)]/5 p-8">
             <div className="text-4xl">✓</div>
             <h3 className="mt-4 text-xl font-semibold text-[var(--color-success)]">
-              You&apos;re on the list
+              You&apos;re on the list{position ? ` (#${position})` : ''}
             </h3>
             <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
               We&apos;ll be in touch when early access opens.
@@ -51,12 +74,22 @@ export default function CTASection() {
             />
             <button
               type="submit"
-              className="group flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--color-accent-gradient-start)] to-[var(--color-accent-gradient-end)] px-6 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              disabled={submitting}
+              className="group flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--color-accent-gradient-start)] to-[var(--color-accent-gradient-end)] px-6 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              Request Early Access
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Request Early Access
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
             </button>
           </form>
+        )}
+        {error && (
+          <p className="mt-3 text-sm text-red-400">{error}</p>
         )}
 
         {/* Trust signals */}

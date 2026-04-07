@@ -76,12 +76,21 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenR
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)) -> UserResponse:
+async def get_me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    # Resolve the user's role in their org
+    result = await db.execute(
+        select(OrgMembership).where(OrgMembership.user_id == user.id).limit(1)
+    )
+    membership = result.scalar_one_or_none()
     return UserResponse(
         id=user.id,
         email=user.email,
         name=user.name,
         avatar_url=user.avatar_url,
         is_active=user.is_active,
+        role=membership.role.value if membership else None,
         created_at=user.created_at,
     )

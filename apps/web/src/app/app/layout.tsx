@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Inbox,
   Layers,
+  Lock,
 } from "lucide-react";
 
 const navItems = [
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/app/search", icon: Search, label: "Search" },
   { href: "/app/integrations", icon: Plug, label: "Integrations" },
   { href: "/app/governance", icon: Shield, label: "Governance" },
+  { href: "/app/admin", icon: Lock, label: "Admin", roles: ["owner", "admin"] },
   { href: "/app/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -61,7 +63,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 p-3 space-y-1">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => !("roles" in item && item.roles) || (user?.role && item.roles?.includes(user.role)))
+            .map((item) => {
             const isActive =
               item.href === "/app"
                 ? pathname === "/app"

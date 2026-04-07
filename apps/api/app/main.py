@@ -24,8 +24,8 @@ def create_app() -> FastAPI:
         description="AI-Native Work OS — unified context, intelligent workflows",
         version="0.1.0",
         lifespan=lifespan,
-        docs_url="/docs" if settings.app_env == "development" else None,
-        redoc_url="/redoc" if settings.app_env == "development" else None,
+        docs_url="/docs",
+        redoc_url="/redoc",
     )
 
     app.add_middleware(

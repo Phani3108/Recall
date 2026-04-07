@@ -1,0 +1,27 @@
+databases:
+  - name: recall-db
+    plan: free
+    databaseName: recall
+    user: recall
+
+services:
+  - type: web
+    name: recall-api
+    plan: free
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: recall-db
+          property: connectionString
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://recall1.vercel.app,http://localhost:3000
+      - key: FRONTEND_URL
+        value: https://recall1.vercel.app
+    healthCheckPath: /api/health

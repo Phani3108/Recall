@@ -71,6 +71,7 @@ class UserResponse(BaseModel):
     name: str
     avatar_url: str | None
     is_active: bool
+    role: str | None = None
     created_at: datetime
 
 
@@ -278,3 +279,73 @@ class GovernanceDashboard(BaseModel):
     total_conversations: int
     total_skill_executions: int
     budget_utilization_pct: float
+
+
+# ── Organization Settings (API Keys / License) ──
+
+
+class PlatformKeysUpdate(BaseModel):
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    composio_api_key: str | None = None
+
+
+class PlatformKeysResponse(BaseModel):
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    composio_api_key: str | None = None
+
+
+class LicenseActivateRequest(BaseModel):
+    license_key: str = Field(min_length=8, max_length=255)
+
+
+class LicenseResponse(BaseModel):
+    tier: str
+    license_key_set: bool
+    valid_until: datetime | None
+
+
+class OrgSettingsResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    license: LicenseResponse
+    platform_keys: PlatformKeysResponse
+    token_budget_monthly: int | None
+    tokens_used_this_month: int
+
+
+# ── Admin ──
+
+
+class AdminOverview(BaseModel):
+    total_users: int
+    total_orgs: int
+    total_conversations: int
+    total_tokens_used: int
+    total_cost_usd: float
+    total_integrations: int
+    total_tasks: int
+    total_delegations: int
+
+
+class AdminUserRow(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class AdminActivityRow(BaseModel):
+    id: uuid.UUID
+    user_email: str | None
+    user_name: str | None
+    action: str
+    resource_type: str | None
+    detail: dict
+    tokens_consumed: int
+    cost_usd: float
+    created_at: datetime

@@ -101,6 +101,12 @@ class AuditAction(str, enum.Enum):
 # ── Organizations ──
 
 
+class LicenseTier(str, enum.Enum):
+    FREE = "free"
+    PRO = "pro"
+    ENTERPRISE = "enterprise"
+
+
 class Organization(BaseModel):
     __tablename__ = "organizations"
 
@@ -108,6 +114,14 @@ class Organization(BaseModel):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     logo_url: Mapped[str | None] = mapped_column(String(500))
     settings: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    # License
+    license_tier: Mapped[str] = mapped_column(String(20), default="free", server_default="free")
+    license_key: Mapped[str | None] = mapped_column(String(255))
+    license_valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Platform API keys (OpenAI, Anthropic, Composio, etc.) — stored per-org
+    platform_keys: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
     # Token budget (monthly)
     token_budget_monthly: Mapped[int | None] = mapped_column(Integer)
@@ -363,3 +377,16 @@ class Delegation(TenantModel):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     execution_result: Mapped[dict | None] = mapped_column(JSONB)
+
+
+# ── Waitlist ──
+
+
+class WaitlistEntry(BaseModel):
+    """Early access waitlist signup — no org/tenant scoping needed."""
+
+    __tablename__ = "waitlist_entries"
+
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    name: Mapped[str | None] = mapped_column(String(255))
+    company: Mapped[str | None] = mapped_column(String(255))
