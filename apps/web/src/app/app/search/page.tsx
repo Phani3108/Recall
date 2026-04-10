@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Search as SearchIcon, FileText, MessageSquare, Code, Users } from "lucide-react";
 import { context, type ContextEntity } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoSearchResults } from "@/lib/demo-data";
 
 const typeIcons: Record<string, typeof FileText> = {
   document: FileText,
@@ -12,6 +14,7 @@ const typeIcons: Record<string, typeof FileText> = {
 };
 
 export default function SearchPage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ContextEntity[]>([]);
   const [searching, setSearching] = useState(false);
@@ -24,10 +27,21 @@ export default function SearchPage() {
     setSearching(true);
     setSearched(true);
     try {
-      const res = await context.search(query.trim());
-      setResults(res.results);
+      if (isDemo) {
+        // Filter demo results by query match
+        const q = query.toLowerCase();
+        const filtered = demoSearchResults.filter(
+          (r) => r.title.toLowerCase().includes(q) || r.content?.toLowerCase().includes(q)
+        );
+        setResults(filtered.length > 0 ? filtered : demoSearchResults);
+      } else {
+        const res = await context.search(query.trim());
+        setResults(res.results);
+      }
     } catch (err) {
       console.error(err);
+      markBackendDown();
+      setResults(demoSearchResults);
     } finally {
       setSearching(false);
     }

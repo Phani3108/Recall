@@ -1,22 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth, AuthProvider } from "@/lib/auth";
+import { DemoProvider } from "@/lib/demo";
+import { demoUser } from "@/lib/demo-data";
 import {
   MessageSquare,
   Search,
   Plug,
   Shield,
   Settings,
-  LogOut,
   Zap,
-  ChevronRight,
   Inbox,
   Layers,
   Lock,
+  Home,
 } from "lucide-react";
 
 const navItems = [
@@ -26,30 +24,13 @@ const navItems = [
   { href: "/app/search", icon: Search, label: "Search" },
   { href: "/app/integrations", icon: Plug, label: "Integrations" },
   { href: "/app/governance", icon: Shield, label: "Governance" },
-  { href: "/app/admin", icon: Lock, label: "Admin", roles: ["owner", "admin"] },
+  { href: "/app/admin", icon: Lock, label: "Admin" },
   { href: "/app/settings", icon: Settings, label: "Settings" },
 ];
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
-  }, [user, loading, router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  const user = demoUser;
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] flex">
@@ -63,9 +44,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 p-3 space-y-1">
-          {navItems
-            .filter((item) => !("roles" in item && item.roles) || (user?.role && item.roles?.includes(user.role)))
-            .map((item) => {
+          {navItems.map((item) => {
             const isActive =
               item.href === "/app"
                 ? pathname === "/app"
@@ -97,13 +76,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               <div className="text-sm text-white truncate">{user.name}</div>
               <div className="text-xs text-gray-500 truncate">{user.email}</div>
             </div>
-            <button
-              onClick={logout}
-              className="text-gray-500 hover:text-gray-300"
-              title="Sign out"
+          </div>
+          <div className="mt-2 px-3">
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-white/5 px-2 py-1 rounded-md transition-colors"
             >
-              <LogOut className="w-4 h-4" />
-            </button>
+              <Home className="w-3.5 h-3.5" />
+              Landing Page
+            </Link>
           </div>
         </div>
       </aside>
@@ -116,8 +97,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
+    <DemoProvider>
       <DashboardShell>{children}</DashboardShell>
-    </AuthProvider>
+    </DemoProvider>
   );
 }

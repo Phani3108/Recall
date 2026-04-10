@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth";
+import { useDemo } from "@/lib/demo";
 import { users, orgSettings, type OrgSettings } from "@/lib/api";
+import { demoUser, demoOrgSettings } from "@/lib/demo-data";
 import {
   Key,
   Shield,
@@ -19,7 +20,7 @@ import {
 type Tab = "profile" | "keys" | "license";
 
 export default function SettingsPage() {
-  const { user, refreshUser, logout } = useAuth();
+  const user = demoUser;
   const [tab, setTab] = useState<Tab>("profile");
 
   const tabs = [
@@ -59,7 +60,7 @@ export default function SettingsPage() {
 
 /* ── Profile Tab ── */
 function ProfileTab() {
-  const { user, refreshUser, logout } = useAuth();
+  const user = demoUser;
   const [name, setName] = useState(user?.name ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -72,7 +73,6 @@ function ProfileTab() {
     setSaved(false);
     try {
       await users.updateMe({ name: name.trim() });
-      await refreshUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -86,7 +86,6 @@ function ProfileTab() {
     setDeleting(true);
     try {
       await users.deleteMe();
-      logout();
     } catch (err) {
       console.error("Failed to delete:", err);
       setDeleting(false);
@@ -182,6 +181,7 @@ function ProfileTab() {
 
 /* ── API Keys Tab ── */
 function ApiKeysTab() {
+  const { isDemo, markBackendDown } = useDemo();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -200,14 +200,20 @@ function ApiKeysTab() {
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [isDemo]);
 
   const loadSettings = async () => {
+    if (isDemo) {
+      setSettings(demoOrgSettings);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await orgSettings.get();
       setSettings(data);
     } catch (err) {
-      setError("Failed to load settings. You may not have admin access.");
+      markBackendDown();
+      setSettings(demoOrgSettings);
     } finally {
       setLoading(false);
     }
@@ -370,6 +376,7 @@ function ApiKeysTab() {
 
 /* ── License Tab ── */
 function LicenseTab() {
+  const { isDemo, markBackendDown } = useDemo();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [licenseKey, setLicenseKey] = useState("");
@@ -379,14 +386,20 @@ function LicenseTab() {
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [isDemo]);
 
   const loadSettings = async () => {
+    if (isDemo) {
+      setSettings(demoOrgSettings);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await orgSettings.get();
       setSettings(data);
     } catch {
-      setError("Failed to load license info.");
+      markBackendDown();
+      setSettings(demoOrgSettings);
     } finally {
       setLoading(false);
     }

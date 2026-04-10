@@ -46,10 +46,10 @@ export default function Navbar() {
         {/* CTA */}
         <div className="hidden items-center gap-4 md:flex">
           <Link
-            href="/login"
+            href="/app"
             className="text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
           >
-            Sign In
+            Dashboard
           </Link>
           <a
             href="#waitlist"
@@ -83,11 +83,11 @@ export default function Navbar() {
             </a>
           ))}
           <Link
-            href="/login"
+            href="/app"
             className="block py-3 text-[var(--color-text-secondary)]"
             onClick={() => setIsOpen(false)}
           >
-            Sign In
+            Dashboard
           </Link>
           <a
             href="#waitlist"

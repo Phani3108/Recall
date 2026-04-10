@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 import { flow, type FlowTask } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoTasks } from "@/lib/demo-data";
 
 type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
 type TaskPriority = "critical" | "high" | "medium" | "low";
@@ -134,6 +136,7 @@ function TaskCard({ task, onStatusChange }: { task: FlowTask; onStatusChange: (i
 }
 
 export default function FlowPage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [tasks, setTasks] = useState<FlowTask[]>([]);
   const [filter, setFilter] = useState<TaskStatus | "all">("all");
   const [loading, setLoading] = useState(true);
@@ -143,21 +146,32 @@ export default function FlowPage() {
   const [creating, setCreating] = useState(false);
 
   const loadTasks = useCallback(async () => {
+    if (isDemo) {
+      setTasks(demoTasks);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await flow.listTasks();
       setTasks(data);
     } catch (err) {
       console.error("Failed to load tasks:", err);
+      markBackendDown();
+      setTasks(demoTasks);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemo, markBackendDown]);
 
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
+    if (isDemo) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t)));
+      return;
+    }
     try {
       const updated = await flow.updateTask(taskId, { status: newStatus } as Partial<FlowTask>);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
@@ -171,12 +185,22 @@ export default function FlowPage() {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      const task = await flow.createTask({
-        title: newTitle.trim(),
-        priority: newPriority,
-        source: "manual",
-      });
-      setTasks((prev) => [task, ...prev]);
+      if (isDemo) {
+        const demoTask: FlowTask = {
+          id: `task-${Date.now()}`, title: newTitle.trim(), description: null,
+          status: "todo", priority: newPriority, assignee_id: null, source: "manual",
+          source_url: null, source_id: null, ai_summary: null, blockers: [], labels: [],
+          due_date: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        };
+        setTasks((prev) => [demoTask, ...prev]);
+      } else {
+        const task = await flow.createTask({
+          title: newTitle.trim(),
+          priority: newPriority,
+          source: "manual",
+        });
+        setTasks((prev) => [task, ...prev]);
+      }
       setNewTitle("");
       setShowNewTask(false);
     } catch (err) {

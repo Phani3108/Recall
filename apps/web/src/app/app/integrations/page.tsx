@@ -15,6 +15,8 @@ import {
   Key,
 } from "lucide-react";
 import { integrations as integrationsApi, type Integration } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoIntegrations } from "@/lib/demo-data";
 
 type ProviderDef = {
   id: string;
@@ -204,6 +206,7 @@ function ApiKeyModal({
 }
 
 export default function IntegrationsPage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [integrationsList, setIntegrationsList] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [providerFieldsMap, setProviderFieldsMap] = useState<Record<string, ProviderMeta>>({});
@@ -213,13 +216,33 @@ export default function IntegrationsPage() {
   const [activeCategory, setActiveCategory] = useState("all");
 
   useEffect(() => {
+    if (isDemo) {
+      setIntegrationsList(demoIntegrations);
+      // Build a sensible providerFieldsMap for demo
+      const demoFields: Record<string, ProviderMeta> = {};
+      for (const p of PROVIDERS) {
+        const isOAuth = ["slack", "github", "google", "notion", "jira", "linear", "gitlab", "zoom", "dropbox", "figma", "asana", "microsoft365", "confluence"].includes(p.id);
+        demoFields[p.id] = {
+          fields: isOAuth ? [] : [{ key: "api_key", label: `${p.name} API Key`, placeholder: `Enter your ${p.name} API key` }],
+          help_url: `https://${p.id}.com/settings/api`,
+          auth_method: isOAuth ? "oauth" : "api_key",
+          oauth_configured: isOAuth,
+        };
+      }
+      setProviderFieldsMap(demoFields);
+      setLoading(false);
+      return;
+    }
     Promise.all([
       integrationsApi.list().then(setIntegrationsList),
       integrationsApi.providerFields().then(setProviderFieldsMap),
     ])
-      .catch(console.error)
+      .catch(() => {
+        markBackendDown();
+        setIntegrationsList(demoIntegrations);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [isDemo, markBackendDown]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {

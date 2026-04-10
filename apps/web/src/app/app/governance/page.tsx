@@ -11,6 +11,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { governance, type GovernanceDashboard, type AuditEntry } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoDashboard, demoAuditLog } from "@/lib/demo-data";
 
 function StatCard({
   icon: Icon,
@@ -69,19 +71,30 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
 }
 
 export default function GovernancePage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [dashboard, setDashboard] = useState<GovernanceDashboard | null>(null);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isDemo) {
+      setDashboard(demoDashboard);
+      setAuditLog(demoAuditLog);
+      setLoading(false);
+      return;
+    }
     Promise.all([governance.dashboard(), governance.auditLog()])
       .then(([d, a]) => {
         setDashboard(d);
         setAuditLog(a);
       })
-      .catch(console.error)
+      .catch(() => {
+        markBackendDown();
+        setDashboard(demoDashboard);
+        setAuditLog(demoAuditLog);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [isDemo, markBackendDown]);
 
   if (loading) {
     return (

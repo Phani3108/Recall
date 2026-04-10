@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth";
+import { useDemo } from "@/lib/demo";
 import {
   admin,
   type AdminOverview,
   type AdminUserRow,
   type AdminActivityRow,
 } from "@/lib/api";
+import { demoUser, demoAdminOverview, demoAdminUsers, demoAdminActivity } from "@/lib/demo-data";
 import {
   Users,
   MessageSquare,
@@ -26,7 +27,8 @@ import {
 type Tab = "overview" | "users" | "activity";
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const user = demoUser;
+  const { isDemo, markBackendDown } = useDemo();
   const [tab, setTab] = useState<Tab>("overview");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [users, setUsers] = useState<AdminUserRow[]>([]);
@@ -36,9 +38,16 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [isDemo]);
 
   const loadData = async () => {
+    if (isDemo) {
+      setOverview(demoAdminOverview);
+      setUsers(demoAdminUsers);
+      setActivity(demoAdminActivity);
+      setLoading(false);
+      return;
+    }
     try {
       const [ov, us, ac] = await Promise.all([
         admin.overview(),
@@ -49,7 +58,15 @@ export default function AdminPage() {
       setUsers(us);
       setActivity(ac);
     } catch (err: any) {
-      setError(err?.detail || "Access denied. Admin role required.");
+      const isNetworkError = err instanceof TypeError || (err?.message?.includes?.("fetch"));
+      if (isNetworkError) {
+        markBackendDown();
+        setOverview(demoAdminOverview);
+        setUsers(demoAdminUsers);
+        setActivity(demoAdminActivity);
+      } else {
+        setError(err?.detail || "Access denied. Admin role required.");
+      }
     } finally {
       setLoading(false);
     }

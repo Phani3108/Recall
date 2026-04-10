@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Send, Plus, MessageSquare, Loader2, ExternalLink } from "lucide-react";
 import { chat, type Conversation, type Message, type Source } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoConversations, demoMessages } from "@/lib/demo-data";
 
 function SourceBadge({ source }: { source: Source }) {
   return (
@@ -103,6 +105,7 @@ function ConversationList({
 }
 
 export default function AskPage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -121,8 +124,19 @@ export default function AskPage() {
 
   // Load conversations
   useEffect(() => {
-    chat.listConversations().then(setConversations).catch(console.error).finally(() => setLoadingConvos(false));
-  }, []);
+    if (isDemo) {
+      setConversations(demoConversations);
+      setLoadingConvos(false);
+      return;
+    }
+    chat.listConversations()
+      .then(setConversations)
+      .catch(() => {
+        markBackendDown();
+        setConversations(demoConversations);
+      })
+      .finally(() => setLoadingConvos(false));
+  }, [isDemo, markBackendDown]);
 
   // Load messages when conversation changes
   useEffect(() => {
@@ -130,10 +144,22 @@ export default function AskPage() {
       setMessages([]);
       return;
     }
+    if (isDemo) {
+      setMessages(demoMessages[activeConversationId] || []);
+      return;
+    }
     chat.getMessages(activeConversationId).then(setMessages).catch(console.error);
-  }, [activeConversationId]);
+  }, [activeConversationId, isDemo]);
 
   const handleCreateConversation = async () => {
+    if (isDemo) {
+      const conv: Conversation = {
+        id: `conv-${Date.now()}`, title: null, user_id: "demo", is_shared: false, created_at: new Date().toISOString(),
+      };
+      setConversations((prev) => [conv, ...prev]);
+      setActiveConversationId(conv.id);
+      return;
+    }
     try {
       const conv = await chat.createConversation();
       setConversations((prev) => [conv, ...prev]);
@@ -141,6 +167,35 @@ export default function AskPage() {
     } catch (err) {
       console.error("Failed to create conversation:", err);
     }
+  };
+
+  // Demo responses keyed by trigger words
+  const getDemoResponse = (query: string): { content: string; sources: Source[] } => {
+    const q = query.toLowerCase();
+    if (q.includes("sprint") || q.includes("planning")) {
+      return {
+        content: "Based on this week's #engineering discussions, the team has aligned on three priorities for the upcoming sprint:\n\n1. **Payment API Migration** — James is leading the v2 migration. The billing service is done; checkout and subscription services remain. Target: July 10.\n\n2. **JWT Auth Rollout** — Sara's implementation is ahead of schedule. Middleware integration starts tomorrow.\n\n3. **Dashboard Performance** — Lin identified 3 slow queries. She'll add composite indexes and rewrite the aggregation endpoint.\n\n**Open Blockers:**\n- CI pipeline at 18min (needs parallel runners, blocked on DevOps)\n- Need staging payment sandbox credentials from finance",
+        sources: [
+          { entity_id: "s1", title: "#engineering — Sprint Thread", source_url: "https://slack.com/archives/C01/p123", source_integration: "slack", relevance_score: 0.95 },
+          { entity_id: "s2", title: "Q3 Sprint Board", source_url: "https://linear.app/acme/q3", source_integration: "linear", relevance_score: 0.88 },
+        ],
+      };
+    }
+    if (q.includes("blocker") || q.includes("blocked")) {
+      return {
+        content: "There are currently **2 active blockers** across the team:\n\n1. **CI Build Time** (18 min) — Needs parallel test runners. DevOps team is on infra migration until Tuesday. No workaround yet.\n\n2. **Payment Sandbox** — James needs staging credentials for the v2 API migration testing. Requested from finance on Monday, no response yet.\n\n_Recommendation: Escalate the payment sandbox request — the v1 deprecation deadline is July 15._",
+        sources: [
+          { entity_id: "s3", title: "ACME-2847: Payment API migration", source_url: "https://acme.atlassian.net/browse/ACME-2847", source_integration: "jira", relevance_score: 0.93 },
+        ],
+      };
+    }
+    return {
+      content: `I searched across your connected tools for "${query}" and here's what I found:\n\n**From Slack (#engineering):**\nRecent discussions mention this topic in the context of the Q3 sprint planning. Sara and James have been coordinating on related work items.\n\n**From Notion:**\nThe Engineering Q3 OKRs document references this area — particularly around platform reliability and developer experience improvements.\n\n**From Jira:**\nThere are 3 open tickets related to this topic, with 1 in progress and 2 in the backlog.\n\n_Want me to dive deeper into any of these?_`,
+      sources: [
+        { entity_id: "s4", title: "#engineering channel", source_url: "https://slack.com/archives/C01", source_integration: "slack", relevance_score: 0.85 },
+        { entity_id: "s5", title: "Q3 OKRs — Engineering", source_url: "https://notion.so/acme/q3-okrs", source_integration: "notion", relevance_score: 0.75 },
+      ],
+    };
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -151,13 +206,22 @@ export default function AskPage() {
 
     // Auto-create conversation if none selected
     if (!conversationId) {
-      try {
-        const conv = await chat.createConversation();
+      if (isDemo) {
+        const conv: Conversation = {
+          id: `conv-${Date.now()}`, title: null, user_id: "demo", is_shared: false, created_at: new Date().toISOString(),
+        };
         setConversations((prev) => [conv, ...prev]);
         conversationId = conv.id;
         setActiveConversationId(conv.id);
-      } catch {
-        return;
+      } else {
+        try {
+          const conv = await chat.createConversation();
+          setConversations((prev) => [conv, ...prev]);
+          conversationId = conv.id;
+          setActiveConversationId(conv.id);
+        } catch {
+          return;
+        }
       }
     }
 
@@ -191,6 +255,31 @@ export default function AskPage() {
     };
 
     setMessages((prev) => [...prev, optimisticUserMsg, streamMsg]);
+
+    // Demo mode: simulate streaming
+    if (isDemo) {
+      const demoResp = getDemoResponse(userContent);
+      const words = demoResp.content.split(" ");
+      let built = "";
+      for (let i = 0; i < words.length; i++) {
+        built += (i === 0 ? "" : " ") + words[i];
+        const snapshot = built;
+        await new Promise((r) => setTimeout(r, 18));
+        setMessages((prev) =>
+          prev.map((m) => m.id === streamMsgId ? { ...m, content: snapshot } : m),
+        );
+      }
+      setMessages((prev) =>
+        prev.map((m) => m.id === streamMsgId ? { ...m, sources: demoResp.sources, model: "gpt-4o (demo)", tokens_used: words.length * 3 } : m),
+      );
+      if (!conversations.find((c) => c.id === conversationId)?.title) {
+        setConversations((prev) =>
+          prev.map((c) => c.id === conversationId ? { ...c, title: userContent.slice(0, 80) } : c),
+        );
+      }
+      setSending(false);
+      return;
+    }
 
     try {
       const response = await chat.sendMessageStream(conversationId, userContent);

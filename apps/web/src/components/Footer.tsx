@@ -27,6 +27,7 @@ export default function Footer() {
               <li><a href="#ask" className="hover:text-[var(--color-text-primary)]">Ask</a></li>
               <li><a href="#pilot" className="hover:text-[var(--color-text-primary)]">Pilot</a></li>
               <li><a href="#flow" className="hover:text-[var(--color-text-primary)]">Flow</a></li>
+              <li><Link href="/app" className="hover:text-[var(--color-text-primary)]">Dashboard</Link></li>
             </ul>
           </div>
 

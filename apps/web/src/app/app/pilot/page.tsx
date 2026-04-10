@@ -13,6 +13,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { pilot, type DelegationItem } from "@/lib/api";
+import { useDemo } from "@/lib/demo";
+import { demoDelegations } from "@/lib/demo-data";
 
 function formatTimeAgo(dateString: string): string {
   const diff = Date.now() - new Date(dateString).getTime();
@@ -60,25 +62,37 @@ function ToolBadge({ tool }: { tool: string }) {
 }
 
 export default function PilotPage() {
+  const { isDemo, markBackendDown } = useDemo();
   const [delegations, setDelegations] = useState<DelegationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadDelegations = useCallback(async () => {
+    if (isDemo) {
+      setDelegations(demoDelegations);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await pilot.listDelegations();
       setDelegations(data);
     } catch (err) {
       console.error("Failed to load delegations:", err);
+      markBackendDown();
+      setDelegations(demoDelegations);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isDemo, markBackendDown]);
 
   useEffect(() => {
     loadDelegations();
   }, [loadDelegations]);
 
   const handleAction = async (id: string, action: "approve" | "reject") => {
+    if (isDemo) {
+      setDelegations((prev) => prev.map((d) => d.id === id ? { ...d, status: action === "approve" ? "approved" : "rejected", resolved_at: new Date().toISOString() } : d));
+      return;
+    }
     try {
       const updated = action === "approve"
         ? await pilot.approve(id)
@@ -92,6 +106,10 @@ export default function PilotPage() {
   };
 
   const handleUndo = async (id: string) => {
+    if (isDemo) {
+      setDelegations((prev) => prev.map((d) => d.id === id ? { ...d, status: "pending", resolved_at: null, resolved_by_user_id: null } : d));
+      return;
+    }
     try {
       const updated = await pilot.undo(id);
       setDelegations((prev) =>

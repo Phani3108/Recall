@@ -4,14 +4,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { useDemo } from "@/lib/demo";
+import { Eye } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { enableDemo } = useDemo();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleTryDemo = () => {
+    enableDemo();
+    router.push("/app");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +29,12 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/app");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const isNetworkError = err instanceof TypeError || (err instanceof Error && err.message.includes("fetch"));
+      if (isNetworkError) {
+        setError("Backend unavailable — try Demo Mode to explore the app.");
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -71,6 +84,19 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+          <div className="relative flex justify-center text-xs"><span className="px-2 bg-[var(--bg-secondary)] text-gray-500">or</span></div>
+        </div>
+
+        <button
+          onClick={handleTryDemo}
+          className="w-full flex items-center justify-center gap-2 border border-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-lg py-2.5 font-medium transition-colors"
+        >
+          <Eye className="w-4 h-4" />
+          Try Demo — no account needed
+        </button>
 
         <p className="text-gray-400 text-sm mt-6 text-center">
           Don&apos;t have an account?{" "}
