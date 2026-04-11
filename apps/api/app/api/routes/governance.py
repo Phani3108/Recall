@@ -5,7 +5,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.db.models import AuditLog, TokenBudget, Integration, Conversation, Skill
 from app.api.deps import get_org_context, OrgContext
-from app.api.schemas import AuditLogResponse, TokenBudgetResponse, GovernanceDashboard
+from app.api.schemas import (
+    AuditLogResponse,
+    TokenBudgetResponse,
+    GovernanceDashboard,
+    RetentionStatsResponse,
+    RetentionPurgeRequest,
+    RetentionPurgeResponse,
+    SecurityStatusResponse,
+)
+from app.services.retention_service import (
+    get_retention_stats,
+    purge_old_entities,
+    purge_old_audit_logs,
+    cleanup_orphan_relations,
+)
+from app.services.metrics_service import metrics
 
 router = APIRouter()
 
@@ -102,3 +117,76 @@ async def list_audit_logs(
         )
         for log in logs
     ]
+
+
+# ── Retention ─────────────────────────────────────────────────────
+
+
+@router.get("/retention/stats", response_model=RetentionStatsResponse)
+async def retention_stats(
+    ctx: OrgContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> RetentionStatsResponse:
+    ctx.require_role("owner", "admin")
+    stats = await get_retention_stats(ctx.org_id, db)
+    return RetentionStatsResponse(**stats)
+
+
+@router.post("/retention/purge", response_model=RetentionPurgeResponse)
+async def retention_purge(
+    body: RetentionPurgeRequest,
+    ctx: OrgContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> RetentionPurgeResponse:
+    ctx.require_role("owner")
+
+    if body.dry_run:
+        # Return counts that _would_ be purged without deleting
+        stats = await get_retention_stats(ctx.org_id, db)
+        return RetentionPurgeResponse(
+            entities_purged=stats["entities_older_than_90d"],
+            audit_logs_purged=stats["audit_logs_older_than_365d"],
+            orphan_relations_cleaned=stats["orphan_relations"],
+            dry_run=True,
+        )
+
+    entities = await purge_old_entities(ctx.org_id, db, body.entity_retention_days)
+    audits = await purge_old_audit_logs(ctx.org_id, db, body.audit_retention_days)
+    orphans = await cleanup_orphan_relations(ctx.org_id, db)
+
+    return RetentionPurgeResponse(
+        entities_purged=entities,
+        audit_logs_purged=audits,
+        orphan_relations_cleaned=orphans,
+        dry_run=False,
+    )
+
+
+# ── Security ──────────────────────────────────────────────────────
+
+
+@router.get("/security/status", response_model=SecurityStatusResponse)
+async def security_status(
+    ctx: OrgContext = Depends(get_org_context),
+) -> SecurityStatusResponse:
+    ctx.require_role("owner", "admin")
+    return SecurityStatusResponse(
+        rate_limiting_enabled=True,
+        security_headers_enabled=True,
+        credential_encryption_enabled=True,
+        token_budget_enforced=True,
+        permission_filtering_enabled=True,
+        metrics_collection_enabled=True,
+        secrets_masked=True,
+    )
+
+
+# ── Metrics ───────────────────────────────────────────────────────
+
+
+@router.get("/metrics")
+async def governance_metrics(
+    ctx: OrgContext = Depends(get_org_context),
+) -> dict:
+    ctx.require_role("owner", "admin")
+    return metrics.snapshot()

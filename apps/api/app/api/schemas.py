@@ -285,6 +285,46 @@ class GovernanceDashboard(BaseModel):
     budget_utilization_pct: float
 
 
+# ── Governance: Retention ──
+
+
+class RetentionStatsResponse(BaseModel):
+    total_entities: int
+    entities_older_than_90d: int
+    entities_older_than_180d: int
+    total_audit_logs: int
+    audit_logs_older_than_365d: int
+    orphan_relations: int
+    entity_retention_days: int
+    audit_retention_days: int
+
+
+class RetentionPurgeRequest(BaseModel):
+    entity_retention_days: int = Field(default=90, ge=7)
+    audit_retention_days: int = Field(default=365, ge=30)
+    dry_run: bool = True
+
+
+class RetentionPurgeResponse(BaseModel):
+    entities_purged: int
+    audit_logs_purged: int
+    orphan_relations_cleaned: int
+    dry_run: bool
+
+
+# ── Governance: Security ──
+
+
+class SecurityStatusResponse(BaseModel):
+    rate_limiting_enabled: bool
+    security_headers_enabled: bool
+    credential_encryption_enabled: bool
+    token_budget_enforced: bool
+    permission_filtering_enabled: bool
+    metrics_collection_enabled: bool
+    secrets_masked: bool
+
+
 # ── Organization Settings (API Keys / License) ──
 
 

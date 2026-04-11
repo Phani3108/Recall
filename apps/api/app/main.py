@@ -3,11 +3,19 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.db.session import engine
 from app.api.router import api_router
-from app.middleware import GovernanceMiddleware, TokenBudgetMiddleware
+from app.middleware import (
+    GovernanceMiddleware,
+    TokenBudgetMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    MetricsMiddleware,
+)
+from app.services.metrics_service import metrics
 
 
 @asynccontextmanager
@@ -28,6 +36,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
+    # Middleware stack — execution order is bottom-up (last added runs first)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -36,10 +45,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(GovernanceMiddleware)
     app.add_middleware(TokenBudgetMiddleware)
 
     app.include_router(api_router, prefix="/api")
+
+    @app.get("/metrics", include_in_schema=False)
+    async def get_metrics() -> JSONResponse:
+        return JSONResponse(content=metrics.snapshot())
 
     return app
 

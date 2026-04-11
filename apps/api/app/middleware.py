@@ -1,33 +1,119 @@
-"""Governance middleware — request audit logging and token budget enforcement.
-
-Automatically logs API requests to the audit trail and checks token budgets
-before AI operations are allowed to proceed.
+"""Governance middleware — request audit logging, token budget enforcement,
+rate limiting, security headers, and metrics collection.
 """
 
 import logging
 import time
-import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from app.db.session import async_session_factory
-from app.db.models import AuditLog, AuditAction, TokenBudget
+from app.db.models import TokenBudget
+from app.services.rate_limiter import api_limiter, ai_limiter, auth_limiter
+from app.services.metrics_service import metrics
 
 logger = logging.getLogger(__name__)
 
 # Paths that trigger token budget checks (AI-consuming endpoints)
-AI_PATHS = {"/api/v1/agents/conversations/"}
-SKIP_AUDIT_PATHS = {"/api/v1/health", "/docs", "/openapi.json", "/redoc"}
+AI_PATHS = {
+    "/api/v1/agents/conversations/",
+    "/api/v1/pilot/",
+    "/api/v1/context/search",
+    "/api/v1/flow/",
+}
+AUTH_PATHS = {"/api/v1/auth/login", "/api/v1/auth/register"}
+SKIP_AUDIT_PATHS = {"/api/v1/health", "/docs", "/openapi.json", "/redoc", "/metrics"}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add OWASP-recommended security headers to every response."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "0"  # Modern browsers — CSP preferred
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-client sliding-window rate limiter.
+
+    Applies different limits: auth (10/min), AI (20/min), general API (120/min).
+    """
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        path = request.url.path
+
+        if any(path.startswith(p) for p in SKIP_AUDIT_PATHS):
+            return await call_next(request)
+
+        # Identify client by IP (or forwarded header in production)
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else "unknown"
+
+        # Pick the appropriate limiter
+        if any(path.startswith(p) for p in AUTH_PATHS):
+            limiter = auth_limiter
+        elif any(path.startswith(p) for p in AI_PATHS):
+            limiter = ai_limiter
+        else:
+            limiter = api_limiter
+
+        allowed, headers = limiter.allow(client_ip)
+
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please retry later."},
+                headers=headers,
+            )
+
+        response = await call_next(request)
+        for k, v in headers.items():
+            response.headers[k] = v
+        return response
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Collect request metrics (count, latency, status codes)."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        path = request.url.path
+
+        if any(path.startswith(p) for p in SKIP_AUDIT_PATHS):
+            return await call_next(request)
+
+        metrics.inc_connections()
+        start = time.monotonic()
+        try:
+            response = await call_next(request)
+            duration = time.monotonic() - start
+            metrics.record_request(request.method, path, response.status_code, duration)
+
+            # Log slow requests
+            if duration > 5.0:
+                logger.warning(
+                    "Slow request: %s %s took %.1fs", request.method, path, duration
+                )
+
+            return response
+        finally:
+            metrics.dec_connections()
 
 
 class GovernanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
-        # Skip audit for health checks and docs
         if any(path.startswith(p) for p in SKIP_AUDIT_PATHS):
             return await call_next(request)
 
@@ -35,7 +121,6 @@ class GovernanceMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = int((time.monotonic() - start_time) * 1000)
 
-        # Log slow requests
         if duration_ms > 5000:
             logger.warning("Slow request: %s %s took %dms", request.method, path, duration_ms)
 
@@ -51,11 +136,9 @@ class TokenBudgetMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
-        # Only check budget on AI endpoints (POST to conversations)
         if request.method != "POST" or not any(path.startswith(p) for p in AI_PATHS):
             return await call_next(request)
 
-        # Extract org_id from the auth token (set by deps.py)
         org_id = request.state.__dict__.get("org_id") if hasattr(request, "state") else None
 
         if org_id:

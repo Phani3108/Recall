@@ -31,6 +31,9 @@ import type {
   AgentProposal,
   AgentStats,
   AgentConfigData,
+  RetentionStats,
+  SecurityStatus,
+  MetricsSnapshot,
 } from "./api";
 
 // ── Helpers ──
@@ -226,6 +229,50 @@ export const demoAuditLog: AuditEntry[] = [
   { id: id("aud", 5), user_id: id("usr", 1), action: "data_accessed", resource_type: "context_entity", resource_id: id("ent", 1), detail: { entity_type: "message" }, tokens_consumed: 0, cost_usd: 0, model_used: null, created_at: ago(60 * 24 * 2) },
   { id: id("aud", 6), user_id: id("usr", 4), action: "ai_query", resource_type: "conversation", resource_id: id("conv", 3), detail: { query_length: 65 }, tokens_consumed: 1230, cost_usd: 0.0185, model_used: "gpt-4o", created_at: ago(60 * 24 * 2) },
 ];
+
+export const demoRetentionStats: RetentionStats = {
+  total_entities: 1287,
+  entities_older_than_90d: 342,
+  entities_older_than_180d: 89,
+  total_audit_logs: 4521,
+  audit_logs_older_than_365d: 0,
+  orphan_relations: 12,
+  entity_retention_days: 90,
+  audit_retention_days: 365,
+};
+
+export const demoSecurityStatus: SecurityStatus = {
+  rate_limiting_enabled: true,
+  security_headers_enabled: true,
+  credential_encryption_enabled: true,
+  token_budget_enforced: true,
+  permission_filtering_enabled: true,
+  metrics_collection_enabled: true,
+  secrets_masked: true,
+};
+
+export const demoMetrics: MetricsSnapshot = {
+  uptime_seconds: 86400,
+  total_requests: 12847,
+  total_errors: 23,
+  error_rate: 0.0018,
+  active_connections: 4,
+  status_codes: { "200": 12312, "201": 478, "404": 18, "429": 3, "500": 2 },
+  top_endpoints: {
+    "GET /api/v1/context/search": 3421,
+    "POST /api/v1/agents/conversations/": 2187,
+    "GET /api/v1/flow/tasks": 1842,
+    "GET /api/v1/governance/dashboard": 987,
+    "GET /api/v1/integrations/": 654,
+  },
+  top_errors: { "GET /api/v1/context/search": 8, "POST /api/v1/agents/conversations/": 5 },
+  latency: {
+    count: 12847,
+    sum: 1542.8,
+    buckets: { "0.01": 892, "0.05": 4521, "0.1": 8342, "0.25": 11234, "0.5": 12100, "1.0": 12650, "2.5": 12800, "5.0": 12840, "10.0": 12847 },
+  },
+  ai: { total_tokens: 123456, total_requests: 2187 },
+};
 
 // ── Context Search ──
 

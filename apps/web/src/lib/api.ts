@@ -133,6 +133,49 @@ export interface GovernanceDashboard {
   budget_utilization_pct: number;
 }
 
+// ── Governance: Retention & Security ──
+
+export interface RetentionStats {
+  total_entities: number;
+  entities_older_than_90d: number;
+  entities_older_than_180d: number;
+  total_audit_logs: number;
+  audit_logs_older_than_365d: number;
+  orphan_relations: number;
+  entity_retention_days: number;
+  audit_retention_days: number;
+}
+
+export interface RetentionPurgeResult {
+  entities_purged: number;
+  audit_logs_purged: number;
+  orphan_relations_cleaned: number;
+  dry_run: boolean;
+}
+
+export interface SecurityStatus {
+  rate_limiting_enabled: boolean;
+  security_headers_enabled: boolean;
+  credential_encryption_enabled: boolean;
+  token_budget_enforced: boolean;
+  permission_filtering_enabled: boolean;
+  metrics_collection_enabled: boolean;
+  secrets_masked: boolean;
+}
+
+export interface MetricsSnapshot {
+  uptime_seconds: number;
+  total_requests: number;
+  total_errors: number;
+  error_rate: number;
+  active_connections: number;
+  status_codes: Record<string, number>;
+  top_endpoints: Record<string, number>;
+  top_errors: Record<string, number>;
+  latency: { count: number; sum: number; buckets: Record<string, number> };
+  ai: { total_tokens: number; total_requests: number };
+}
+
 // ── Flow: Tasks ──
 
 export interface FlowTask {
@@ -473,6 +516,18 @@ export const governance = {
   dashboard: () => apiFetch<GovernanceDashboard>("/governance/dashboard"),
   auditLog: (limit = 50, offset = 0) =>
     apiFetch<AuditEntry[]>(`/governance/audit-logs?limit=${limit}&offset=${offset}`),
+  retentionStats: () => apiFetch<RetentionStats>("/governance/retention/stats"),
+  retentionPurge: (entityDays = 90, auditDays = 365, dryRun = true) =>
+    apiFetch<RetentionPurgeResult>("/governance/retention/purge", {
+      method: "POST",
+      body: JSON.stringify({
+        entity_retention_days: entityDays,
+        audit_retention_days: auditDays,
+        dry_run: dryRun,
+      }),
+    }),
+  securityStatus: () => apiFetch<SecurityStatus>("/governance/security/status"),
+  metrics: () => apiFetch<MetricsSnapshot>("/governance/metrics"),
 };
 
 // ── Knowledge Graph ──
