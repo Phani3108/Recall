@@ -453,3 +453,88 @@ class AgentConfig(TenantModel):
         server_default='["stale_pr", "blocked_ticket", "missed_deadline", "unreviewed_pr", "idle_sprint_item", "knowledge_gap"]',
     )
     learning_data: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
+
+# ── Notifications ──
+
+
+class Notification(TenantModel):
+    """In-app notification for a user — created by system events."""
+
+    __tablename__ = "notifications"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    link: Mapped[str | None] = mapped_column(String(1000))
+    icon: Mapped[str | None] = mapped_column(String(50))
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ── Teams ──
+
+
+class Team(TenantModel):
+    """A team within an organization."""
+
+    __tablename__ = "teams"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+
+
+class TeamMember(TenantModel):
+    """User membership in a team."""
+
+    __tablename__ = "team_members"
+
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), default="member")  # lead, member
+
+
+# ── Org Invitations ──
+
+
+class OrgInvitation(TenantModel):
+    """Email-based organization invitation."""
+
+    __tablename__ = "org_invitations"
+
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), default="member")
+    invited_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# ── Comments ──
+
+
+class Comment(TenantModel):
+    """Threaded comment on any resource (task, delegation, proposal)."""
+
+    __tablename__ = "comments"
+
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    resource_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("comments.id", ondelete="CASCADE")
+    )

@@ -34,6 +34,15 @@ import type {
   RetentionStats,
   SecurityStatus,
   MetricsSnapshot,
+  BuiltinTemplate,
+  NotificationItem,
+  TeamItem,
+  TokenTrend,
+  ProductivityStats,
+  CostForecast,
+  TopUser,
+  IntegrationHealthItem,
+  AgentIntelligence,
 } from "./api";
 
 // ── Helpers ──
@@ -341,9 +350,9 @@ export const demoOrgSettings: OrgSettings = {
 // ── Skills ──
 
 export const demoSkills: SkillItem[] = [
-  { id: id("skill", 1), name: "Standup Summary", description: "Generates a daily standup summary from Slack messages and Jira updates.", version: 3, is_builtin: true, is_published: true, execution_count: 142, upvotes: 12, downvotes: 1, created_at: ago(60 * 24 * 30) },
-  { id: id("skill", 2), name: "PR Review Digest", description: "Summarizes open pull requests with review status, age, and suggested reviewers.", version: 2, is_builtin: false, is_published: true, execution_count: 67, upvotes: 8, downvotes: 0, created_at: ago(60 * 24 * 14) },
-  { id: id("skill", 3), name: "Incident Response", description: "Coordinates incident response by notifying on-call, creating war room, and drafting status page update.", version: 1, is_builtin: true, is_published: true, execution_count: 5, upvotes: 4, downvotes: 0, created_at: ago(60 * 24 * 7) },
+  { id: id("skill", 1), name: "Standup Summary", description: "Generates a daily standup summary from Slack messages and Jira updates.", version: 3, is_builtin: true, is_published: true, execution_count: 142, upvotes: 12, downvotes: 1, steps: [{ tool: "slack", action: "post_message", params: { channel: "#standup", text: "🌅 Daily standup summary…" } }], trigger: { type: "scheduled", cron: "0 9 * * 1-5" }, created_at: ago(60 * 24 * 30) },
+  { id: id("skill", 2), name: "PR Review Digest", description: "Summarizes open pull requests with review status, age, and suggested reviewers.", version: 2, is_builtin: false, is_published: true, execution_count: 67, upvotes: 8, downvotes: 0, steps: [{ tool: "slack", action: "post_message", params: { channel: "#engineering", text: "👀 Open PRs needing review…" } }], trigger: { type: "on_pattern", pattern: "stale_pr" }, created_at: ago(60 * 24 * 14) },
+  { id: id("skill", 3), name: "Incident Response", description: "Coordinates incident response by notifying on-call, creating war room, and drafting status page update.", version: 1, is_builtin: true, is_published: true, execution_count: 5, upvotes: 4, downvotes: 0, steps: [{ tool: "slack", action: "post_message", params: { channel: "#incidents", text: "🚨 Incident triggered…" } }, { tool: "jira", action: "create_issue", params: { project_key: "OPS", summary: "Incident: {{trigger.title}}" } }], trigger: { type: "manual" }, created_at: ago(60 * 24 * 7) },
 ];
 
 // ── Knowledge Graph ──
@@ -515,4 +524,89 @@ export const demoAgentConfig: AgentConfigData = {
   confidence_threshold: 0.6,
   auto_approve_threshold: 0.95,
   patterns_enabled: ["stale_pr", "blocked_ticket", "missed_deadline", "unreviewed_pr", "idle_sprint_item"],
+};
+
+// ── Builtin skill templates ──
+
+export const demoBuiltinTemplates: BuiltinTemplate[] = [
+  { name: "Standup Summary", description: "Posts a daily standup summary to Slack with recent activity from Jira and GitHub.", trigger: { type: "scheduled", cron: "0 9 * * 1-5" }, steps: [{ tool: "slack", action: "post_message", params: { channel: "#standup", text: "🌅 Daily Standup Summary" } }] },
+  { name: "PR Review Reminder", description: "Sends a Slack reminder when a PR has been open for more than 24 hours without a review.", trigger: { type: "on_pattern", pattern: "stale_pr" }, steps: [{ tool: "slack", action: "post_message", params: { channel: "#engineering", text: "👀 Review Needed: {{trigger.pr_title}}" } }] },
+  { name: "Sprint Report", description: "Generates a summary of completed vs remaining sprint items and posts to Slack.", trigger: { type: "scheduled", cron: "0 17 * * 5" }, steps: [{ tool: "slack", action: "post_message", params: { channel: "#engineering", text: "📊 Sprint Report" } }] },
+  { name: "Knowledge Digest", description: "Posts a weekly digest of new documents and decisions to a Slack channel.", trigger: { type: "scheduled", cron: "0 10 * * 1" }, steps: [{ tool: "slack", action: "post_message", params: { channel: "#knowledge", text: "📚 Weekly Knowledge Digest" } }] },
+  { name: "Onboarding Checklist", description: "Creates a Jira onboarding task with standard checklist items for a new team member.", trigger: { type: "manual" }, steps: [{ tool: "jira", action: "create_issue", params: { project_key: "{{trigger.project_key}}", summary: "Onboarding: {{trigger.new_member_name}}" } }] },
+];
+
+// ── Notifications ──
+
+export const demoNotifications: NotificationItem[] = [
+  { id: id("notif", 1), kind: "sync_complete", title: "GitHub sync complete", body: "Synced 23 new entities from GitHub.", link: "/app/integrations", icon: "github", read_at: null, created_at: ago(15) },
+  { id: id("notif", 2), kind: "proposal_created", title: "New agent proposal", body: "Stale PR detected: PR #287 has been open for 4 days.", link: "/app/agent", icon: "bot", read_at: null, created_at: ago(45) },
+  { id: id("notif", 3), kind: "delegation_executed", title: "Action completed", body: "Posted standup summary to #engineering.", link: "/app/pilot", icon: "check", read_at: ago(60), created_at: ago(120) },
+  { id: id("notif", 4), kind: "skill_executed", title: "Skill ran successfully", body: "Standup Summary executed (1/1 steps).", link: "/app/skills", icon: "zap", read_at: ago(180), created_at: ago(240) },
+  { id: id("notif", 5), kind: "budget_warning", title: "Budget alert", body: "You've used 80% of your monthly token budget.", link: "/app/governance", icon: "alert", read_at: null, created_at: ago(60 * 24) },
+];
+
+// ── Teams ──
+
+export const demoTeams: TeamItem[] = [
+  { id: id("team", 1), name: "Engineering", description: "Core engineering team", slug: "engineering", avatar_url: null, member_count: 4, created_at: ago(60 * 24 * 90) },
+  { id: id("team", 2), name: "Product", description: "Product & design", slug: "product", avatar_url: null, member_count: 2, created_at: ago(60 * 24 * 60) },
+];
+
+// ── Analytics ──
+
+export const demoTokenTrends: TokenTrend[] = Array.from({ length: 30 }, (_, i) => ({
+  day: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
+  tokens: Math.floor(2000 + Math.random() * 6000),
+  cost: parseFloat((0.03 + Math.random() * 0.09).toFixed(4)),
+  requests: Math.floor(50 + Math.random() * 150),
+}));
+
+export const demoProductivity: ProductivityStats = {
+  period_days: 30,
+  tasks_created: 42,
+  tasks_completed: 31,
+  task_completion_rate: 0.74,
+  delegations_total: 18,
+  delegations_executed: 12,
+  delegations_approved: 15,
+  conversations: 47,
+  messages: 312,
+};
+
+export const demoCostForecast: CostForecast = {
+  daily_avg: 0.614,
+  projected_monthly: 18.42,
+  trend: "stable",
+  data_points: 30,
+};
+
+export const demoTopUsers: TopUser[] = [
+  { user_id: id("usr", 1), name: "Alex Chen", email: "alex@acme.dev", tokens: 45230, cost: 6.78, requests: 89 },
+  { user_id: id("usr", 2), name: "Sara Kim", email: "sara@acme.dev", tokens: 32100, cost: 4.82, requests: 64 },
+  { user_id: id("usr", 3), name: "James Rodriguez", email: "james@acme.dev", tokens: 28400, cost: 4.26, requests: 52 },
+  { user_id: id("usr", 4), name: "Emily Watson", email: "emily@acme.dev", tokens: 12800, cost: 1.92, requests: 28 },
+  { user_id: id("usr", 5), name: "David Park", email: "david@acme.dev", tokens: 4926, cost: 0.64, requests: 12 },
+];
+
+export const demoIntegrationHealth: IntegrationHealthItem[] = [
+  { id: id("int", 1), provider: "github", status: "connected", entity_count: 342, last_synced_at: ago(30), synced_entity_count: 342 },
+  { id: id("int", 2), provider: "slack", status: "connected", entity_count: 521, last_synced_at: ago(15), synced_entity_count: 521 },
+  { id: id("int", 3), provider: "jira", status: "connected", entity_count: 189, last_synced_at: ago(45), synced_entity_count: 189 },
+  { id: id("int", 4), provider: "confluence", status: "connected", entity_count: 87, last_synced_at: ago(120), synced_entity_count: 87 },
+  { id: id("int", 5), provider: "notion", status: "error", entity_count: 148, last_synced_at: ago(60 * 48), synced_entity_count: 148 },
+];
+
+export const demoAgentIntelligence: AgentIntelligence = {
+  period_days: 7,
+  total_proposals: 12,
+  total_approved: 8,
+  approval_rate: 0.67,
+  patterns: {
+    stale_pr: { total: 4, approved: 3, rejected: 1, pending: 0 },
+    blocked_ticket: { total: 3, approved: 2, rejected: 0, pending: 1 },
+    missed_deadline: { total: 2, approved: 1, rejected: 1, pending: 0 },
+    unreviewed_pr: { total: 2, approved: 2, rejected: 0, pending: 0 },
+    idle_sprint_item: { total: 1, approved: 0, rejected: 0, pending: 1 },
+  },
 };

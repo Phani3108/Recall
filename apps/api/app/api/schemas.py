@@ -176,6 +176,8 @@ class SkillResponse(BaseModel):
     execution_count: int
     upvotes: int
     downvotes: int
+    steps: list[dict] = []
+    trigger: dict = {}
     created_at: datetime
 
 

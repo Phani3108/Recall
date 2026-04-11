@@ -241,7 +241,30 @@ export interface SkillItem {
   execution_count: number;
   upvotes: number;
   downvotes: number;
+  steps: Array<{ tool: string; action: string; params: Record<string, unknown> }>;
+  trigger: Record<string, unknown>;
   created_at: string;
+}
+
+export interface SkillExecutionResult {
+  success: boolean;
+  steps_completed: number;
+  steps_total: number;
+  step_results: Array<{
+    step: number;
+    tool: string;
+    action: string;
+    success: boolean;
+    message: string;
+  }>;
+  error: string | null;
+}
+
+export interface BuiltinTemplate {
+  name: string;
+  description: string;
+  trigger: Record<string, unknown>;
+  steps: Array<{ tool: string; action: string; params: Record<string, unknown> }>;
 }
 
 // ── API Error ──
@@ -506,6 +529,28 @@ export const skills = {
       { method: "POST" },
     ),
 
+  publish: (skillId: string) =>
+    apiFetch<SkillItem>(`/skills/${skillId}/publish`, { method: "POST" }),
+
+  unpublish: (skillId: string) =>
+    apiFetch<SkillItem>(`/skills/${skillId}/unpublish`, { method: "POST" }),
+
+  execute: (skillId: string, triggerData: Record<string, unknown> = {}) =>
+    apiFetch<SkillExecutionResult>(`/skills/${skillId}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ trigger_data: triggerData }),
+    }),
+
+  clone: (skillId: string) =>
+    apiFetch<SkillItem>(`/skills/${skillId}/clone`, { method: "POST" }),
+
+  builtins: () => apiFetch<BuiltinTemplate[]>("/skills/templates/builtins"),
+
+  installBuiltin: (templateName: string) =>
+    apiFetch<SkillItem>(`/skills/templates/install?template_name=${encodeURIComponent(templateName)}`, {
+      method: "POST",
+    }),
+
   delete: (skillId: string) =>
     apiFetch<void>(`/skills/${skillId}`, { method: "DELETE" }),
 };
@@ -747,4 +792,160 @@ export const admin = {
   users: () => apiFetch<AdminUserRow[]>("/admin/users"),
   activity: (limit = 100, offset = 0) =>
     apiFetch<AdminActivityRow[]>(`/admin/activity?limit=${limit}&offset=${offset}`),
+};
+
+// ── Notifications ──
+
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string | null;
+  icon: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationSummary {
+  unread_count: number;
+  notifications: NotificationItem[];
+}
+
+export const notifications = {
+  list: (unreadOnly = false, limit = 30) =>
+    apiFetch<NotificationSummary>(`/notifications/?unread_only=${unreadOnly}&limit=${limit}`),
+  unreadCount: () => apiFetch<{ unread_count: number }>("/notifications/unread-count"),
+  markRead: (id: string) => apiFetch<{ ok: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () => apiFetch<{ marked_read: number }>("/notifications/read-all", { method: "POST" }),
+  dismiss: (id: string) => apiFetch<{ ok: boolean }>(`/notifications/${id}`, { method: "DELETE" }),
+};
+
+// ── Teams ──
+
+export interface TeamItem {
+  id: string;
+  name: string;
+  description: string | null;
+  slug: string;
+  avatar_url: string | null;
+  member_count: number;
+  created_at: string;
+}
+
+export interface TeamMemberItem {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: string;
+  joined_at: string;
+}
+
+export const teams = {
+  list: () => apiFetch<TeamItem[]>("/teams/"),
+  create: (team: { name: string; description?: string; slug: string }) =>
+    apiFetch<TeamItem>("/teams/", { method: "POST", body: JSON.stringify(team) }),
+  members: (teamId: string) => apiFetch<TeamMemberItem[]>(`/teams/${teamId}/members`),
+  addMember: (teamId: string, userId: string, role = "member") =>
+    apiFetch<{ status: string }>(`/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, role }),
+    }),
+  removeMember: (teamId: string, userId: string) =>
+    apiFetch<void>(`/teams/${teamId}/members/${userId}`, { method: "DELETE" }),
+  delete: (teamId: string) => apiFetch<void>(`/teams/${teamId}`, { method: "DELETE" }),
+};
+
+// ── Comments ──
+
+export interface CommentItem {
+  id: string;
+  resource_type: string;
+  resource_id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  parent_id: string | null;
+  created_at: string;
+}
+
+export const comments = {
+  list: (resourceType: string, resourceId: string) =>
+    apiFetch<CommentItem[]>(`/comments/${resourceType}/${resourceId}`),
+  create: (resourceType: string, resourceId: string, content: string, parentId?: string) =>
+    apiFetch<CommentItem>(`/comments/${resourceType}/${resourceId}`, {
+      method: "POST",
+      body: JSON.stringify({ content, parent_id: parentId || null }),
+    }),
+  delete: (commentId: string) =>
+    apiFetch<void>(`/comments/${commentId}`, { method: "DELETE" }),
+};
+
+// ── Analytics ──
+
+export interface TokenTrend {
+  day: string;
+  tokens: number;
+  cost: number;
+  requests: number;
+}
+
+export interface ProductivityStats {
+  period_days: number;
+  tasks_created: number;
+  tasks_completed: number;
+  task_completion_rate: number;
+  delegations_total: number;
+  delegations_executed: number;
+  delegations_approved: number;
+  conversations: number;
+  messages: number;
+}
+
+export interface CostForecast {
+  daily_avg: number;
+  projected_monthly: number;
+  trend: string;
+  data_points: number;
+}
+
+export interface AnalyticsOverview {
+  productivity: ProductivityStats;
+  cost_forecast: CostForecast;
+}
+
+export interface TopUser {
+  user_id: string;
+  name: string;
+  email: string;
+  tokens: number;
+  cost: number;
+  requests: number;
+}
+
+export interface IntegrationHealthItem {
+  id: string;
+  provider: string;
+  status: string;
+  entity_count: number;
+  last_synced_at: string | null;
+  synced_entity_count: number;
+}
+
+export interface AgentIntelligence {
+  period_days: number;
+  total_proposals: number;
+  total_approved: number;
+  approval_rate: number;
+  patterns: Record<string, { total: number; approved: number; rejected: number; pending: number }>;
+}
+
+export const analytics = {
+  overview: (days = 30) => apiFetch<AnalyticsOverview>(`/analytics/overview?days=${days}`),
+  tokenTrends: (days = 30) => apiFetch<TokenTrend[]>(`/analytics/token-trends?days=${days}`),
+  topUsers: (limit = 10) => apiFetch<TopUser[]>(`/analytics/top-users?limit=${limit}`),
+  integrationHealth: () => apiFetch<IntegrationHealthItem[]>("/analytics/integration-health"),
+  agentIntelligence: (days = 7) => apiFetch<AgentIntelligence>(`/analytics/agent-intelligence?days=${days}`),
+  costForecast: () => apiFetch<CostForecast>("/analytics/cost-forecast"),
 };
