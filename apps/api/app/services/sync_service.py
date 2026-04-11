@@ -123,7 +123,10 @@ async def validate_and_sync(
         # Index into Weaviate for hybrid search (best-effort, don't fail sync)
         indexed = await _index_entities_to_weaviate(entities, org_id, integration_id, db)
 
-        return {"status": "ok", "synced": count, "indexed": indexed, "error": None}
+        # Build entity relationships for the knowledge graph (best-effort)
+        relations = await _build_entity_relations(entities, org_id, db)
+
+        return {"status": "ok", "synced": count, "indexed": indexed, "relations": relations, "error": None}
     except httpx.HTTPStatusError as e:
         code = e.response.status_code
         if code in (401, 403):
@@ -222,6 +225,38 @@ async def _index_entities_to_weaviate(
 
     await db.flush()
     return indexed
+
+
+async def _build_entity_relations(
+    entities: list[dict],
+    org_id: uuid.UUID,
+    db: AsyncSession,
+) -> int:
+    """Best-effort build entity relationships for the knowledge graph."""
+    try:
+        from app.services.graph_builder import build_relations_for_entity
+    except Exception:
+        logger.warning("Graph builder unavailable, skipping relation extraction")
+        return 0
+
+    relations = 0
+    for e in entities:
+        try:
+            result = await db.execute(
+                select(ContextEntity).where(
+                    ContextEntity.org_id == org_id,
+                    ContextEntity.source_id == e["source_id"],
+                )
+            )
+            entity = result.scalar_one_or_none()
+            if entity:
+                count = await build_relations_for_entity(entity, db)
+                relations += count
+        except Exception:
+            logger.debug("Failed to build relations for %s", e.get("source_id"), exc_info=True)
+            continue
+
+    return relations
 
 
 # ── Provider implementations ──

@@ -263,20 +263,137 @@ async def hybrid_search(
     user_id: uuid.UUID,
     entity_types: list[str] | None = None,
     limit: int = 20,
+    use_graph: bool = True,
 ) -> list[dict[str, Any]]:
-    """Hybrid search: vector similarity + keyword matching, filtered by org and permissions.
+    """GraphRAG search: vector similarity + keyword matching + graph expansion.
+
+    1. Run hybrid search (Weaviate or SQL fallback)
+    2. For top results, expand via entity graph neighbors (1-hop)
+    3. Score by relevance + freshness + graph connectivity
+    4. Filter by org and permissions
 
     Falls back to SQL ILIKE search if Weaviate is unavailable.
     Returns ranked results with relevance scores.
     """
-    # Try Weaviate first
+    # Step 1: Run base search
     try:
-        return await _weaviate_search(query, org_id, user_id, entity_types, limit)
+        base_results = await _weaviate_search(query, org_id, user_id, entity_types, limit)
     except Exception:
         logger.warning("Weaviate unavailable, falling back to SQL search", exc_info=True)
+        base_results = await _sql_fallback_search(query, org_id, user_id, entity_types, limit)
 
-    # SQL fallback
-    return await _sql_fallback_search(query, org_id, user_id, entity_types, limit)
+    if not use_graph or not base_results:
+        return _apply_freshness_scoring(base_results)
+
+    # Step 2: Graph expansion — find neighbors of top results
+    try:
+        expanded = await _graph_expand(base_results, org_id, user_id, entity_types, limit)
+        return _apply_freshness_scoring(expanded)
+    except Exception:
+        logger.debug("Graph expansion failed, returning base results", exc_info=True)
+        return _apply_freshness_scoring(base_results)
+
+
+def _apply_freshness_scoring(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Boost scores for newer content (freshness decay)."""
+    import time
+
+    now = time.time()
+    for r in results:
+        base_score = r.get("score", 0.5)
+        # If we have created_at, apply freshness boost
+        created_at = r.get("created_at")
+        if created_at:
+            try:
+                from datetime import datetime
+                if isinstance(created_at, str):
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    age_days = (now - dt.timestamp()) / 86400
+                else:
+                    age_days = 30  # default
+                # Freshness multiplier: 1.0 for today, decays to 0.7 at 90 days
+                freshness = max(0.7, 1.0 - (age_days / 300))
+                r["score"] = base_score * freshness
+            except Exception:
+                pass
+
+    # Re-sort by adjusted score
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return results
+
+
+async def _graph_expand(
+    base_results: list[dict[str, Any]],
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    entity_types: list[str] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Expand search results using graph neighbors (GraphRAG).
+
+    For the top 5 results, fetch 1-hop neighbors from the entity graph.
+    Neighbors get a boosted score based on their graph proximity.
+    """
+    from app.db.session import async_session_factory
+    from app.services.graph_builder import get_entity_neighbors
+
+    seen_ids = {r["entity_id"] for r in base_results}
+    graph_results: list[dict[str, Any]] = []
+
+    async with async_session_factory() as session:
+        # Expand top 5 results
+        for result in base_results[:5]:
+            try:
+                entity_id = uuid.UUID(result["entity_id"])
+                neighbors = await get_entity_neighbors(
+                    entity_id=entity_id,
+                    org_id=org_id,
+                    db=session,
+                    depth=1,
+                    limit=10,
+                )
+
+                for n in neighbors:
+                    nid = n["entity_id"]
+                    if nid in seen_ids:
+                        continue
+                    # Filter by entity types if specified
+                    if entity_types and n.get("entity_type") not in entity_types:
+                        continue
+
+                    seen_ids.add(nid)
+                    # Graph neighbors get a fraction of parent's score
+                    parent_score = result.get("score", 0.5)
+                    rel_type = n.get("relation_type", "")
+                    # "mentions" relations are stronger than "same_label"
+                    rel_weight = {
+                        "mentions": 0.6,
+                        "blocks": 0.7,
+                        "comment_on": 0.5,
+                        "related_to": 0.4,
+                        "same_sprint": 0.3,
+                        "same_label": 0.2,
+                        "authored_by": 0.3,
+                    }.get(rel_type, 0.3)
+
+                    graph_results.append({
+                        "entity_id": nid,
+                        "entity_type": n.get("entity_type", "document"),
+                        "title": n.get("title", ""),
+                        "content": n.get("content", ""),
+                        "source_url": n.get("source_url"),
+                        "source_integration": n.get("source_integration", ""),
+                        "score": parent_score * rel_weight,
+                        "graph_hop": n.get("hop", 1),
+                        "graph_relation": rel_type,
+                    })
+            except Exception:
+                continue
+
+    # Merge base + graph results, sorted by score
+    combined = base_results + graph_results
+    combined.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return combined[:limit]
 
 
 async def _sql_fallback_search(

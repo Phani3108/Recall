@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import health, auth, orgs, users, integrations, context, agents, governance, flow, pilot, skills, admin, waitlist
+from app.api.routes import health, auth, orgs, users, integrations, context, agents, governance, flow, pilot, skills, admin, waitlist, knowledge
 
 api_router = APIRouter()
 
@@ -17,3 +17,4 @@ api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(governance.router, prefix="/governance", tags=["governance"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(waitlist.router, prefix="/waitlist", tags=["waitlist"])
+api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])

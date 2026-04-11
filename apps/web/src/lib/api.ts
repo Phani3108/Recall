@@ -475,6 +475,54 @@ export const governance = {
     apiFetch<AuditEntry[]>(`/governance/audit-logs?limit=${limit}&offset=${offset}`),
 };
 
+// ── Knowledge Graph ──
+
+export interface GraphNode {
+  id: string;
+  title: string;
+  entity_type: string;
+  source_integration: string;
+  source_url: string | null;
+  content_preview: string;
+  extra: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  relation_type: string;
+}
+
+export interface KnowledgeGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphStats {
+  total_nodes: number;
+  total_edges: number;
+  nodes_by_type: Record<string, number>;
+  edges_by_relation: Record<string, number>;
+  nodes_by_source: Record<string, number>;
+}
+
+export const knowledgeGraph = {
+  getGraph: (limitNodes = 200, limitEdges = 500) =>
+    apiFetch<KnowledgeGraph>(`/knowledge/graph?limit_nodes=${limitNodes}&limit_edges=${limitEdges}`),
+
+  getNeighbors: (entityId: string, depth = 1) =>
+    apiFetch<{ entity_id: string; neighbors: Array<Record<string, unknown>>; count: number }>(
+      `/knowledge/graph/entity/${entityId}/neighbors?depth=${depth}`,
+    ),
+
+  rebuild: () =>
+    apiFetch<{ status: string; relations_created: number }>("/knowledge/graph/rebuild", {
+      method: "POST",
+    }),
+
+  stats: () => apiFetch<GraphStats>("/knowledge/graph/stats"),
+};
+
 // ── Users ──
 
 export const users = {

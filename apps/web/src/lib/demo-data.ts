@@ -24,6 +24,10 @@ import type {
   AdminUserRow,
   AdminActivityRow,
   OrgSettings,
+  GraphNode,
+  GraphEdge,
+  KnowledgeGraph,
+  GraphStats,
 } from "./api";
 
 // ── Helpers ──
@@ -291,3 +295,50 @@ export const demoSkills: SkillItem[] = [
   { id: id("skill", 2), name: "PR Review Digest", description: "Summarizes open pull requests with review status, age, and suggested reviewers.", version: 2, is_builtin: false, is_published: true, execution_count: 67, upvotes: 8, downvotes: 0, created_at: ago(60 * 24 * 14) },
   { id: id("skill", 3), name: "Incident Response", description: "Coordinates incident response by notifying on-call, creating war room, and drafting status page update.", version: 1, is_builtin: true, is_published: true, execution_count: 5, upvotes: 4, downvotes: 0, created_at: ago(60 * 24 * 7) },
 ];
+
+// ── Knowledge Graph ──
+
+const graphNodes: GraphNode[] = [
+  { id: id("ent", 1), title: "AUTH-142: JWT token refresh bug", entity_type: "ticket", source_integration: "jira", source_url: "https://acme.atlassian.net/browse/AUTH-142", content_preview: "JWT refresh tokens are not rotating correctly, causing 401 errors after 30 minutes.", extra: { status: "In Progress", sprint: "Sprint 24" } },
+  { id: id("ent", 2), title: "AUTH-139: Add OAuth2 PKCE support", entity_type: "ticket", source_integration: "jira", source_url: "https://acme.atlassian.net/browse/AUTH-139", content_preview: "Implement PKCE flow for public clients per OAuth 2.1 spec.", extra: { status: "Done", sprint: "Sprint 23" } },
+  { id: id("ent", 3), title: "PR #287: Fix token refresh rotation", entity_type: "pull_request", source_integration: "github", source_url: "https://github.com/acme/backend/pull/287", content_preview: "Fixes the JWT refresh rotation by adding jti claim tracking and a token family chain.", extra: { state: "open", reviewers: ["sara-kim"] } },
+  { id: id("ent", 4), title: "PR #281: PKCE implementation", entity_type: "pull_request", source_integration: "github", source_url: "https://github.com/acme/backend/pull/281", content_preview: "Adds code_challenge and code_verifier support to the authorization endpoint.", extra: { state: "merged" } },
+  { id: id("ent", 5), title: "Authentication Architecture", entity_type: "page", source_integration: "confluence", source_url: "https://acme.atlassian.net/wiki/spaces/ENG/pages/auth-architecture", content_preview: "Overview of the auth system: JWT access tokens (15 min), refresh tokens (7 days), OAuth2 providers.", extra: {} },
+  { id: id("ent", 6), title: "PLAT-98: API rate limiting", entity_type: "ticket", source_integration: "jira", source_url: "https://acme.atlassian.net/browse/PLAT-98", content_preview: "Implement sliding window rate limiting per API key with Redis backend.", extra: { status: "To Do", sprint: "Sprint 24" } },
+  { id: id("ent", 7), title: "Sprint 24 Retrospective", entity_type: "page", source_integration: "confluence", source_url: "https://acme.atlassian.net/wiki/spaces/ENG/pages/sprint-24-retro", content_preview: "What went well: auth refactor on track. What to improve: code review turnaround.", extra: {} },
+  { id: id("ent", 8), title: "PR #290: Rate limiter middleware", entity_type: "pull_request", source_integration: "github", source_url: "https://github.com/acme/backend/pull/290", content_preview: "Adds Redis-backed sliding window rate limiter as FastAPI middleware.", extra: { state: "open" } },
+  { id: id("ent", 9), title: "PLAT-95: Database connection pooling", entity_type: "ticket", source_integration: "jira", source_url: "https://acme.atlassian.net/browse/PLAT-95", content_preview: "Switch from per-request connections to pgBouncer-managed pool.", extra: { status: "In Review", sprint: "Sprint 24" } },
+  { id: id("ent", 10), title: "#incident-2024-01-15 auth outage", entity_type: "message", source_integration: "slack", source_url: null, content_preview: "Auth service returned 503 for 12 minutes due to connection pool exhaustion during peak traffic.", extra: { channel: "#incidents" } },
+  { id: id("ent", 11), title: "Infrastructure Runbook", entity_type: "page", source_integration: "confluence", source_url: "https://acme.atlassian.net/wiki/spaces/OPS/pages/infra-runbook", content_preview: "Step-by-step procedures for common infrastructure incidents including database failover and auth recovery.", extra: {} },
+  { id: id("ent", 12), title: "AUTH-145: Session management refactor", entity_type: "ticket", source_integration: "jira", source_url: "https://acme.atlassian.net/browse/AUTH-145", content_preview: "Refactor session storage to use Redis with configurable TTL instead of in-memory store.", extra: { status: "To Do", sprint: "Sprint 25" } },
+];
+
+const graphEdges: GraphEdge[] = [
+  { source: id("ent", 3), target: id("ent", 1), relation_type: "mentions" },
+  { source: id("ent", 4), target: id("ent", 2), relation_type: "mentions" },
+  { source: id("ent", 1), target: id("ent", 2), relation_type: "related_to" },
+  { source: id("ent", 1), target: id("ent", 6), relation_type: "same_sprint" },
+  { source: id("ent", 1), target: id("ent", 9), relation_type: "same_sprint" },
+  { source: id("ent", 6), target: id("ent", 9), relation_type: "same_sprint" },
+  { source: id("ent", 5), target: id("ent", 1), relation_type: "mentions" },
+  { source: id("ent", 5), target: id("ent", 2), relation_type: "mentions" },
+  { source: id("ent", 7), target: id("ent", 1), relation_type: "mentions" },
+  { source: id("ent", 8), target: id("ent", 6), relation_type: "mentions" },
+  { source: id("ent", 10), target: id("ent", 9), relation_type: "related_to" },
+  { source: id("ent", 10), target: id("ent", 11), relation_type: "mentions" },
+  { source: id("ent", 12), target: id("ent", 1), relation_type: "related_to" },
+  { source: id("ent", 12), target: id("ent", 5), relation_type: "mentions" },
+];
+
+export const demoKnowledgeGraph: KnowledgeGraph = {
+  nodes: graphNodes,
+  edges: graphEdges,
+};
+
+export const demoGraphStats: GraphStats = {
+  total_nodes: graphNodes.length,
+  total_edges: graphEdges.length,
+  nodes_by_type: { ticket: 5, pull_request: 3, page: 3, message: 1 },
+  edges_by_relation: { mentions: 8, related_to: 3, same_sprint: 3 },
+  nodes_by_source: { jira: 5, github: 3, confluence: 3, slack: 1 },
+};
