@@ -126,7 +126,10 @@ async def validate_and_sync(
         # Build entity relationships for the knowledge graph (best-effort)
         relations = await _build_entity_relations(entities, org_id, db)
 
-        return {"status": "ok", "synced": count, "indexed": indexed, "relations": relations, "error": None}
+        # Run agent observe → plan pipeline (best-effort, don't fail sync)
+        agent_proposals = await _run_agent_scan(org_id, db)
+
+        return {"status": "ok", "synced": count, "indexed": indexed, "relations": relations, "agent_proposals": agent_proposals, "error": None}
     except httpx.HTTPStatusError as e:
         code = e.response.status_code
         if code in (401, 403):
@@ -257,6 +260,25 @@ async def _build_entity_relations(
             continue
 
     return relations
+
+
+async def _run_agent_scan(
+    org_id: uuid.UUID,
+    db: AsyncSession,
+) -> int:
+    """Best-effort run of the autonomous agent observe → plan pipeline after sync."""
+    try:
+        from app.agents.observer import observe
+        from app.agents.planner import plan
+
+        observations = await observe(org_id, db)
+        if observations:
+            proposals = await plan(observations, org_id, db)
+            return len(proposals)
+        return 0
+    except Exception:
+        logger.warning("Agent scan failed after sync, skipping", exc_info=True)
+        return 0
 
 
 # ── Provider implementations ──

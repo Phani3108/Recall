@@ -523,6 +523,79 @@ export const knowledgeGraph = {
   stats: () => apiFetch<GraphStats>("/knowledge/graph/stats"),
 };
 
+// ── Autonomous Agent ──
+
+export interface AgentProposal {
+  id: string;
+  pattern_type: string;
+  title: string;
+  description: string;
+  suggested_action: string;
+  tool: string;
+  confidence: number;
+  priority: string;
+  status: string;
+  entity_ids: string[];
+  context_snapshot: Record<string, unknown>;
+  delegation_id: string | null;
+  created_at: string;
+}
+
+export interface AgentConfigData {
+  enabled: boolean;
+  mode: string;
+  confidence_threshold: number;
+  auto_approve_threshold: number;
+  patterns_enabled: string[];
+}
+
+export interface AgentStats {
+  total_proposals: number;
+  by_status: Record<string, number>;
+  by_pattern: Record<string, number>;
+  approval_rate: number;
+  learning: {
+    patterns: Record<string, { total: number; approved: number; rejected: number; approval_rate: number }>;
+    total_feedback: number;
+    overall_approval_rate: number;
+    confidence_threshold: number;
+    mode: string;
+    enabled: boolean;
+  };
+}
+
+export interface ScanResult {
+  observations_found: number;
+  proposals_created: number;
+  proposals: AgentProposal[];
+}
+
+export const agentLoop = {
+  proposals: (status?: string) =>
+    apiFetch<AgentProposal[]>(`/agent/proposals${status ? `?status=${status}` : ""}`),
+
+  approve: (id: string) =>
+    apiFetch<AgentProposal>(`/agent/proposals/${id}/approve`, { method: "POST" }),
+
+  reject: (id: string) =>
+    apiFetch<AgentProposal>(`/agent/proposals/${id}/reject`, { method: "POST" }),
+
+  dismiss: (id: string) =>
+    apiFetch<AgentProposal>(`/agent/proposals/${id}/dismiss`, { method: "POST" }),
+
+  scan: () => apiFetch<ScanResult>("/agent/scan", { method: "POST" }),
+
+  stats: () => apiFetch<AgentStats>("/agent/stats"),
+
+  config: () => apiFetch<AgentConfigData>("/agent/config"),
+
+  updateConfig: (update: Partial<AgentConfigData>) =>
+    apiFetch<AgentConfigData>("/agent/config", {
+      method: "PUT",
+      body: JSON.stringify(update),
+    }),
+};
+
 // ── Users ──
 
 export const users = {

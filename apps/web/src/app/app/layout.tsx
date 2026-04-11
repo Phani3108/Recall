@@ -16,6 +16,7 @@ import {
   Lock,
   Home,
   Network,
+  Bot,
 } from "lucide-react";
 
 const navItems = [
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/app/flow", icon: Layers, label: "Flow" },
   { href: "/app/search", icon: Search, label: "Search" },
   { href: "/app/knowledge", icon: Network, label: "Knowledge" },
+  { href: "/app/agent", icon: Bot, label: "Agent" },
   { href: "/app/integrations", icon: Plug, label: "Integrations" },
   { href: "/app/governance", icon: Shield, label: "Governance" },
   { href: "/app/admin", icon: Lock, label: "Admin" },

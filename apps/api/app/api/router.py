@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import health, auth, orgs, users, integrations, context, agents, governance, flow, pilot, skills, admin, waitlist, knowledge
+from app.api.routes import agent as agent_loop
 
 api_router = APIRouter()
 
@@ -18,3 +19,4 @@ api_router.include_router(governance.router, prefix="/governance", tags=["govern
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(waitlist.router, prefix="/waitlist", tags=["waitlist"])
 api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
+api_router.include_router(agent_loop.router, prefix="/agent", tags=["agent-loop"])
