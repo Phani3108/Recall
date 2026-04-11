@@ -4,10 +4,12 @@ Each provider has a sync function that:
 1. Validates credentials via a test API call
 2. Fetches recent data (repos, issues, messages, pages, etc.)
 3. Returns a list of entity dicts for upserting into context_entities
+4. Indexes entities into Weaviate for hybrid search
 """
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -101,29 +103,37 @@ async def validate_and_sync(
     org_id: uuid.UUID,
     integration_id: uuid.UUID,
     db: AsyncSession,
+    since: datetime | None = None,
 ) -> dict:
     """Validate credentials and sync data from a provider.
 
-    Returns: {"status": "ok"|"error", "synced": int, "error": str|None}
+    Args:
+        since: If provided, only fetch items updated after this timestamp (incremental sync).
+
+    Returns: {"status": "ok"|"error", "synced": int, "indexed": int, "error": str|None}
     """
     syncer = _SYNCERS.get(provider)
     if not syncer:
-        return {"status": "error", "synced": 0, "error": f"No syncer for {provider}"}
+        return {"status": "error", "synced": 0, "indexed": 0, "error": f"No syncer for {provider}"}
 
     try:
-        entities = await syncer(config)
+        entities = await syncer(config, since=since)
         count = await _upsert_entities(entities, org_id, integration_id, db)
-        return {"status": "ok", "synced": count, "error": None}
+
+        # Index into Weaviate for hybrid search (best-effort, don't fail sync)
+        indexed = await _index_entities_to_weaviate(entities, org_id, integration_id, db)
+
+        return {"status": "ok", "synced": count, "indexed": indexed, "error": None}
     except httpx.HTTPStatusError as e:
         code = e.response.status_code
         if code in (401, 403):
-            return {"status": "error", "synced": 0, "error": "Invalid or expired credentials"}
-        return {"status": "error", "synced": 0, "error": f"Provider API error ({code})"}
+            return {"status": "error", "synced": 0, "indexed": 0, "error": "Invalid or expired credentials"}
+        return {"status": "error", "synced": 0, "indexed": 0, "error": f"Provider API error ({code})"}
     except ValueError as e:
-        return {"status": "error", "synced": 0, "error": str(e)}
+        return {"status": "error", "synced": 0, "indexed": 0, "error": str(e)}
     except Exception as e:
         logger.error("Sync failed for %s: %s", provider, e, exc_info=True)
-        return {"status": "error", "synced": 0, "error": f"Sync failed: {type(e).__name__}"}
+        return {"status": "error", "synced": 0, "indexed": 0, "error": f"Sync failed: {type(e).__name__}"}
 
 
 async def _upsert_entities(
@@ -165,13 +175,63 @@ async def _upsert_entities(
     return count
 
 
+async def _index_entities_to_weaviate(
+    entities: list[dict],
+    org_id: uuid.UUID,
+    integration_id: uuid.UUID,
+    db: AsyncSession,
+) -> int:
+    """Best-effort index synced entities into Weaviate for hybrid search."""
+    try:
+        from app.services.context_engine import index_entity, ensure_collection_exists
+        await ensure_collection_exists()
+    except Exception:
+        logger.warning("Weaviate unavailable, skipping vector indexing")
+        return 0
+
+    indexed = 0
+    for e in entities:
+        try:
+            # Look up the entity we just upserted to get its UUID
+            result = await db.execute(
+                select(ContextEntity).where(
+                    ContextEntity.org_id == org_id,
+                    ContextEntity.source_id == e["source_id"],
+                )
+            )
+            entity = result.scalar_one_or_none()
+            if not entity:
+                continue
+
+            vector_ids = await index_entity(
+                entity_id=entity.id,
+                org_id=org_id,
+                entity_type=e["entity_type"],
+                title=e["title"],
+                content=e.get("content", ""),
+                source_integration=e.get("extra_data", {}).get("source_integration", ""),
+                source_url=e.get("source_url"),
+                access_everyone=True,
+            )
+            if vector_ids:
+                entity.vector_id = vector_ids[0]
+                indexed += 1
+        except Exception:
+            logger.debug("Failed to index entity %s", e.get("source_id"), exc_info=True)
+            continue
+
+    await db.flush()
+    return indexed
+
+
 # ── Provider implementations ──
 
 
-async def _sync_github(config: dict) -> list[dict]:
+async def _sync_github(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     entities: list[dict] = []
+    since_param = f"&since={since.isoformat()}" if since else ""
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Validate + fetch repos
@@ -202,7 +262,7 @@ async def _sync_github(config: dict) -> list[dict]:
             try:
                 ir = await client.get(
                     f"https://api.github.com/repos/{repo['full_name']}/issues"
-                    f"?state=all&per_page=10&sort=updated",
+                    f"?state=all&per_page=10&sort=updated{since_param}",
                     headers=headers,
                 )
                 ir.raise_for_status()
@@ -226,7 +286,7 @@ async def _sync_github(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_slack(config: dict) -> list[dict]:
+async def _sync_slack(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": f"Bearer {token}"}
     entities: list[dict] = []
@@ -278,7 +338,7 @@ async def _sync_slack(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_notion(config: dict) -> list[dict]:
+async def _sync_notion(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"}
     entities: list[dict] = []
@@ -319,7 +379,7 @@ async def _sync_notion(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_jira(config: dict) -> list[dict]:
+async def _sync_jira(config: dict, since: datetime | None = None) -> list[dict]:
     import base64
     email, token, domain = config["email"], config["token"], config["domain"]
     domain = domain.replace("https://", "").replace("http://", "").rstrip("/")
@@ -327,9 +387,16 @@ async def _sync_jira(config: dict) -> list[dict]:
     headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
     entities: list[dict] = []
 
+    # Build JQL with optional since filter
+    jql = "ORDER+BY+updated+DESC"
+    if since:
+        jql = f"updated+>=+'{since.strftime('%Y-%m-%d+%H:%M')}'+ORDER+BY+updated+DESC"
+
     async with httpx.AsyncClient(timeout=30.0) as client:
+        # Fetch issues with expanded fields
         resp = await client.get(
-            f"https://{domain}/rest/api/3/search?jql=ORDER+BY+updated+DESC&maxResults=50&fields=summary,description,status,priority,assignee",
+            f"https://{domain}/rest/api/3/search?jql={jql}"
+            f"&maxResults=50&fields=summary,description,status,priority,assignee,comment,sprint,labels,issuetype,project",
             headers=headers,
         )
         resp.raise_for_status()
@@ -344,23 +411,87 @@ async def _sync_jira(config: dict) -> list[dict]:
                         desc_content += inline.get("text", "")
                     desc_content += "\n"
 
+            # Extract comments
+            comments_text = ""
+            comment_data = fields.get("comment", {})
+            for comment in (comment_data.get("comments") or [])[-5:]:  # last 5 comments
+                author = (comment.get("author") or {}).get("displayName", "Unknown")
+                body_parts = []
+                if comment.get("body"):
+                    for block in comment["body"].get("content", []):
+                        for inline in block.get("content", []):
+                            body_parts.append(inline.get("text", ""))
+                comments_text += f"\n[{author}]: {''.join(body_parts)}"
+
+            # Extract sprint info
+            sprint = fields.get("sprint") or {}
+            sprint_name = sprint.get("name", "")
+
+            # Extract labels
+            labels = fields.get("labels", [])
+            issue_type = (fields.get("issuetype") or {}).get("name", "Issue")
+            project_key = (fields.get("project") or {}).get("key", "")
+
+            full_content = desc_content[:1500] or "No description"
+            if comments_text:
+                full_content += f"\n\n--- Recent Comments ---{comments_text[:500]}"
+            if sprint_name:
+                full_content += f"\n\nSprint: {sprint_name}"
+
             entities.append({
                 "source_id": f"jira:issue:{issue['key']}",
                 "entity_type": "task",
                 "title": f"[{issue['key']}] {fields.get('summary', 'Untitled')}",
-                "content": desc_content[:2000] or "No description",
+                "content": full_content,
                 "source_url": f"https://{domain}/browse/{issue['key']}",
                 "extra_data": {
-                    "source_integration": "jira", "type": "issue",
+                    "source_integration": "jira", "type": issue_type.lower(),
                     "status": (fields.get("status") or {}).get("name", ""),
                     "priority": (fields.get("priority") or {}).get("name", ""),
+                    "assignee": (fields.get("assignee") or {}).get("displayName", ""),
+                    "sprint": sprint_name,
+                    "labels": labels,
+                    "project": project_key,
                 },
             })
+
+        # Fetch active sprints from all boards
+        try:
+            boards_resp = await client.get(
+                f"https://{domain}/rest/agile/1.0/board?maxResults=5",
+                headers=headers,
+            )
+            if boards_resp.status_code == 200:
+                for board in boards_resp.json().get("values", []):
+                    try:
+                        sprints_resp = await client.get(
+                            f"https://{domain}/rest/agile/1.0/board/{board['id']}/sprint?state=active",
+                            headers=headers,
+                        )
+                        if sprints_resp.status_code == 200:
+                            for sprint in sprints_resp.json().get("values", []):
+                                entities.append({
+                                    "source_id": f"jira:sprint:{sprint['id']}",
+                                    "entity_type": "document",
+                                    "title": f"[Sprint] {sprint.get('name', 'Unnamed')}",
+                                    "content": (
+                                        f"Goal: {sprint.get('goal', 'No goal set')}\n"
+                                        f"Start: {sprint.get('startDate', 'N/A')[:10]}\n"
+                                        f"End: {sprint.get('endDate', 'N/A')[:10]}\n"
+                                        f"State: {sprint.get('state', 'unknown')}"
+                                    ),
+                                    "source_url": f"https://{domain}/jira/software/projects/{board.get('location', {}).get('projectKey', '')}/boards/{board['id']}",
+                                    "extra_data": {"source_integration": "jira", "type": "sprint"},
+                                })
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
     return entities
 
 
-async def _sync_linear(config: dict) -> list[dict]:
+async def _sync_linear(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": token, "Content-Type": "application/json"}
     entities: list[dict] = []
@@ -397,8 +528,9 @@ async def _sync_linear(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_confluence(config: dict) -> list[dict]:
+async def _sync_confluence(config: dict, since: datetime | None = None) -> list[dict]:
     import base64
+    import re
     email, token, domain = config["email"], config["token"], config["domain"]
     domain = domain.replace("https://", "").replace("http://", "").rstrip("/")
     auth = base64.b64encode(f"{email}:{token}".encode()).decode()
@@ -406,6 +538,30 @@ async def _sync_confluence(config: dict) -> list[dict]:
     entities: list[dict] = []
 
     async with httpx.AsyncClient(timeout=30.0) as client:
+        # Fetch spaces first for context
+        try:
+            spaces_resp = await client.get(
+                f"https://{domain}/wiki/api/v2/spaces?limit=25&sort=name",
+                headers=headers,
+            )
+            if spaces_resp.status_code == 200:
+                for space in spaces_resp.json().get("results", []):
+                    entities.append({
+                        "source_id": f"confluence:space:{space['id']}",
+                        "entity_type": "document",
+                        "title": f"[Confluence Space] {space.get('name', 'Unnamed')}",
+                        "content": (
+                            f"Key: {space.get('key', '')}\n"
+                            f"Type: {space.get('type', 'global')}\n"
+                            f"Description: {space.get('description', {}).get('plain', {}).get('value', 'No description')}"
+                        ),
+                        "source_url": f"https://{domain}/wiki/spaces/{space.get('key', '')}",
+                        "extra_data": {"source_integration": "confluence", "type": "space"},
+                    })
+        except Exception:
+            pass
+
+        # Fetch pages with content
         resp = await client.get(
             f"https://{domain}/wiki/api/v2/pages?limit=50&sort=-modified-date&body-format=storage",
             headers=headers,
@@ -414,8 +570,7 @@ async def _sync_confluence(config: dict) -> list[dict]:
 
         for page in resp.json().get("results", []):
             body = page.get("body", {}).get("storage", {}).get("value", "")
-            # Strip HTML tags crudely for content preview
-            import re
+            # Strip HTML tags for content preview
             text = re.sub(r"<[^>]+>", " ", body)
             text = re.sub(r"\s+", " ", text).strip()
 
@@ -428,13 +583,41 @@ async def _sync_confluence(config: dict) -> list[dict]:
                 "extra_data": {
                     "source_integration": "confluence", "type": "page",
                     "space": page.get("spaceId", ""),
+                    "version": page.get("version", {}).get("number", 1),
                 },
             })
+
+            # Fetch inline comments for pages with significant content
+            if len(text) > 100:
+                try:
+                    comments_resp = await client.get(
+                        f"https://{domain}/wiki/api/v2/pages/{page['id']}/footer-comments?limit=10&body-format=storage",
+                        headers=headers,
+                    )
+                    if comments_resp.status_code == 200:
+                        for comment in comments_resp.json().get("results", []):
+                            cbody = comment.get("body", {}).get("storage", {}).get("value", "")
+                            ctext = re.sub(r"<[^>]+>", " ", cbody)
+                            ctext = re.sub(r"\s+", " ", ctext).strip()
+                            if ctext:
+                                entities.append({
+                                    "source_id": f"confluence:comment:{comment['id']}",
+                                    "entity_type": "message",
+                                    "title": f"Comment on: {page.get('title', 'Untitled')}",
+                                    "content": ctext[:1000],
+                                    "source_url": f"https://{domain}/wiki{page.get('_links', {}).get('webui', '')}",
+                                    "extra_data": {
+                                        "source_integration": "confluence", "type": "comment",
+                                        "page_id": page["id"],
+                                    },
+                                })
+                except Exception:
+                    continue
 
     return entities
 
 
-async def _sync_gitlab(config: dict) -> list[dict]:
+async def _sync_gitlab(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     domain = config.get("domain", "gitlab.com").replace("https://", "").replace("http://", "").rstrip("/")
     headers = {"PRIVATE-TOKEN": token}
@@ -489,7 +672,7 @@ async def _sync_gitlab(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_google(config: dict) -> list[dict]:
+async def _sync_google(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     entities: list[dict] = []
 
@@ -518,7 +701,7 @@ async def _sync_google(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_microsoft365(config: dict) -> list[dict]:
+async def _sync_microsoft365(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": f"Bearer {token}"}
     entities: list[dict] = []
@@ -571,7 +754,7 @@ async def _sync_microsoft365(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_dropbox(config: dict) -> list[dict]:
+async def _sync_dropbox(config: dict, since: datetime | None = None) -> list[dict]:
     token = config["token"]
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     entities: list[dict] = []
@@ -608,7 +791,7 @@ async def _sync_dropbox(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_zoom(config: dict) -> list[dict]:
+async def _sync_zoom(config: dict, since: datetime | None = None) -> list[dict]:
     token = config.get("access_token") or config.get("token", "")
     headers = {"Authorization": f"Bearer {token}"}
     entities: list[dict] = []
@@ -658,7 +841,7 @@ async def _sync_zoom(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_figma(config: dict) -> list[dict]:
+async def _sync_figma(config: dict, since: datetime | None = None) -> list[dict]:
     token = config.get("access_token") or config.get("token", "")
     headers = {"X-Figma-Token": token}
     entities: list[dict] = []
@@ -699,7 +882,7 @@ async def _sync_figma(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_asana(config: dict) -> list[dict]:
+async def _sync_asana(config: dict, since: datetime | None = None) -> list[dict]:
     token = config.get("access_token") or config.get("token", "")
     headers = {"Authorization": f"Bearer {token}"}
     entities: list[dict] = []
@@ -740,7 +923,7 @@ async def _sync_asana(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_hubspot(config: dict) -> list[dict]:
+async def _sync_hubspot(config: dict, since: datetime | None = None) -> list[dict]:
     token = config.get("access_token") or config.get("token", "")
     headers = {"Authorization": f"Bearer {token}"}
     entities: list[dict] = []
@@ -798,7 +981,7 @@ async def _sync_hubspot(config: dict) -> list[dict]:
     return entities
 
 
-async def _sync_claude(config: dict) -> list[dict]:
+async def _sync_claude(config: dict, since: datetime | None = None) -> list[dict]:
     """Claude/Anthropic — just validate the API key works."""
     token = config.get("token", "")
     entities: list[dict] = []

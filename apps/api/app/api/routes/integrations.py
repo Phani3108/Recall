@@ -360,6 +360,7 @@ async def sync_integration(
         org_id=ctx.org_id,
         integration_id=integration.id,
         db=db,
+        since=integration.last_synced_at,  # incremental sync
     )
 
     if sync_result["status"] == "ok":
@@ -373,6 +374,7 @@ async def sync_integration(
     return {
         "status": integration.status.value,
         "synced": sync_result.get("synced", 0),
+        "indexed": sync_result.get("indexed", 0),
         "error": sync_result.get("error"),
     }
 

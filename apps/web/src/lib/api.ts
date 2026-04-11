@@ -436,6 +436,12 @@ export const pilot = {
       method: "POST",
     }),
 
+  execute: (delegationId: string) =>
+    apiFetch<{ success: boolean; action: string; message: string; url: string | null; data: Record<string, unknown> }>(
+      `/pilot/delegations/${delegationId}/execute`,
+      { method: "POST" },
+    ),
+
   stats: () => apiFetch<DelegationStats>("/pilot/delegations/stats/summary"),
 };
 

@@ -1,5 +1,6 @@
-"""Pilot routes — AI delegation proposals: propose, review, approve/reject."""
+"""Pilot routes — AI delegation proposals: propose, review, approve/reject, execute."""
 
+import logging
 import uuid
 from datetime import datetime, UTC
 
@@ -11,6 +12,9 @@ from app.db.session import get_db
 from app.db.models import Delegation, DelegationStatus, AuditLog, AuditAction
 from app.api.deps import get_org_context, OrgContext
 from app.api.schemas import DelegationCreate, DelegationResponse
+from app.services.execution_engine import execute_delegation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -84,6 +88,7 @@ async def create_delegation(
 @router.post("/delegations/{delegation_id}/approve", response_model=DelegationResponse)
 async def approve_delegation(
     delegation_id: uuid.UUID,
+    auto_execute: bool = Query(default=True, description="Execute immediately after approval"),
     ctx: OrgContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> DelegationResponse:
@@ -112,6 +117,15 @@ async def approve_delegation(
         resource_id=delegation.id,
         detail={"action": delegation.action, "tool": delegation.tool},
     ))
+
+    # Auto-execute if requested
+    if auto_execute:
+        try:
+            exec_result = await execute_delegation(delegation, db)
+            # execution_engine updates delegation status and records result
+        except Exception as e:
+            logger.warning("Auto-execution failed for delegation %s: %s", delegation_id, e)
+            # Delegation stays in APPROVED state — user can retry via /execute
 
     return _delegation_to_response(delegation)
 
@@ -203,4 +217,40 @@ async def delegation_stats(
         "executed": counts.get("executed", 0),
         "total": total,
         "approval_rate": round(approved / total * 100) if total > 0 else 0,
+    }
+
+
+@router.post("/delegations/{delegation_id}/execute")
+async def execute_delegation_endpoint(
+    delegation_id: uuid.UUID,
+    ctx: OrgContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Explicitly execute an approved delegation.
+
+    Use this to retry execution of previously approved delegations
+    that weren't auto-executed or whose execution failed.
+    """
+    result = await db.execute(
+        select(Delegation).where(
+            Delegation.id == delegation_id,
+            Delegation.org_id == ctx.org_id,
+        )
+    )
+    delegation = result.scalar_one_or_none()
+    if not delegation:
+        raise HTTPException(status_code=404, detail="Delegation not found")
+    if delegation.status == DelegationStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Delegation must be approved before execution")
+    if delegation.status == DelegationStatus.REJECTED:
+        raise HTTPException(status_code=400, detail="Cannot execute a rejected delegation")
+
+    exec_result = await execute_delegation(delegation, db)
+
+    return {
+        "success": exec_result.success,
+        "action": exec_result.action,
+        "message": exec_result.message,
+        "url": exec_result.url,
+        "data": exec_result.data,
     }

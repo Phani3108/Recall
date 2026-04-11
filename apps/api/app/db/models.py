@@ -186,6 +186,8 @@ class Integration(TenantModel):
     credential_ref: Mapped[str | None] = mapped_column(String(255))
     config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     last_synced_at: Mapped[datetime | None] = mapped_column()
+    sync_cursor: Mapped[dict | None] = mapped_column(JSONB)
+    synced_entity_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     organization: Mapped["Organization"] = relationship(back_populates="integrations")
 
