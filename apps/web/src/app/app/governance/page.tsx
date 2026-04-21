@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Shield,
   Zap,
@@ -16,6 +16,7 @@ import {
   BarChart3,
   Clock,
   Database,
+  Download,
 } from "lucide-react";
 import {
   governance,
@@ -26,6 +27,7 @@ import {
   type MetricsSnapshot,
 } from "@/lib/api";
 import { useDemo } from "@/lib/demo";
+import { isStrictApiMode } from "@/lib/strict-api";
 import {
   demoDashboard,
   demoAuditLog,
@@ -104,7 +106,7 @@ function SecurityBadge({ label, enabled }: { label: string; enabled: boolean }) 
 }
 
 export default function GovernancePage() {
-  const { isDemo, markBackendDown } = useDemo();
+  const { isDemo, markBackendDown, setApiReachabilityError } = useDemo();
   const [dashboard, setDashboard] = useState<GovernanceDashboard | null>(null);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [retention, setRetention] = useState<RetentionStats | null>(null);
@@ -138,15 +140,36 @@ export default function GovernancePage() {
         setMetricsData(m);
       })
       .catch(() => {
-        markBackendDown();
-        setDashboard(demoDashboard);
-        setAuditLog(demoAuditLog);
-        setRetention(demoRetentionStats);
-        setSecurity(demoSecurityStatus);
-        setMetricsData(demoMetrics);
+        if (isStrictApiMode()) {
+          setApiReachabilityError(
+            "Cannot reach the Recall API — check NEXT_PUBLIC_API_URL and that the backend is running.",
+          );
+        } else {
+          markBackendDown();
+          setDashboard(demoDashboard);
+          setAuditLog(demoAuditLog);
+          setRetention(demoRetentionStats);
+          setSecurity(demoSecurityStatus);
+          setMetricsData(demoMetrics);
+        }
       })
       .finally(() => setLoading(false));
-  }, [isDemo, markBackendDown]);
+  }, [isDemo, markBackendDown, setApiReachabilityError]);
+
+  const handleExportAudit = useCallback(async () => {
+    if (isDemo) return;
+    try {
+      const blob = await governance.exportAuditJsonl();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "recall-audit.jsonl";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Audit export failed:", e);
+    }
+  }, [isDemo]);
 
   if (loading) {
     return (
@@ -215,10 +238,22 @@ export default function GovernancePage() {
           </div>
 
           <div className="glass-card p-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <Shield className="w-5 h-5 text-[var(--accent)]" />
-              Audit Log
-            </h2>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Shield className="w-5 h-5 text-[var(--accent)]" />
+                Audit Log
+              </h2>
+              {!isDemo && (
+                <button
+                  type="button"
+                  onClick={handleExportAudit}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/5 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Export JSONL
+                </button>
+              )}
+            </div>
             <div>
               {auditLog.length === 0 ? (
                 <div className="text-gray-400 text-sm py-8 text-center">

@@ -133,6 +133,11 @@ class Organization(BaseModel):
     token_budget_monthly: Mapped[int | None] = mapped_column(Integer)
     tokens_used_this_month: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
+    # Stripe (optional — set via checkout + webhooks)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
+    subscription_status: Mapped[str] = mapped_column(String(50), default="none", server_default="none")
+
     members: Mapped[list["OrgMembership"]] = relationship(back_populates="organization")
     integrations: Mapped[list["Integration"]] = relationship(back_populates="organization")
 

@@ -50,10 +50,6 @@ class Settings(BaseSettings):
     authentik_client_id: str = "recall"
     authentik_client_secret: str = ""
 
-    # Temporal (optional compose profile ``extras`` — not used by the API process yet)
-    temporal_host: str = "localhost:7233"
-    temporal_namespace: str = "recall"
-
     # Composio
     composio_api_key: str = ""
 
@@ -84,6 +80,17 @@ class Settings(BaseSettings):
     asana_client_secret: str = ""
     hubspot_client_id: str = ""
     hubspot_client_secret: str = ""
+
+    # Stripe billing (optional)
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id: str = ""  # e.g. price_xxx for subscription mode
+
+    # OIDC SSO (optional — OpenID Connect authorization code flow)
+    oidc_issuer_url: str = ""  # e.g. https://login.microsoftonline.com/{tenant}/v2.0
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_path: str = "/api/auth/oidc/callback"  # full URL built from api_url + path
 
     # S3
     s3_endpoint: str = "http://localhost:9002"

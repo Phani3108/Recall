@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
+import { isStrictApiMode } from "./strict-api";
+
 interface DemoState {
   /** true when the frontend is running in demo / offline mode */
   isDemo: boolean;
@@ -11,14 +13,18 @@ interface DemoState {
   disableDemo: () => void;
   /** Toggle current state */
   toggleDemo: () => void;
-  /** Called by API layer when backend is unreachable — auto-enables demo */
+  /** Called by API layer when backend is unreachable — auto-enables demo (skipped in strict API mode) */
   markBackendDown: () => void;
+  /** Set when strict API mode and a fetch failed due to network (does not switch to demo automatically) */
+  apiReachabilityError: string | null;
+  setApiReachabilityError: (msg: string | null) => void;
 }
 
 const DEMO_KEY = "recall_demo_mode";
 
 function getInitial(): boolean {
   if (typeof window === "undefined") return true;
+  if (isStrictApiMode()) return false;
   const stored = localStorage.getItem(DEMO_KEY);
   // Default to demo mode (true) unless explicitly set to "false"
   return stored !== "false";
@@ -28,6 +34,7 @@ const DemoContext = createContext<DemoState | null>(null);
 
 export function DemoProvider({ children }: { children: ReactNode }) {
   const [isDemo, setIsDemo] = useState(getInitial);
+  const [apiReachabilityError, setApiReachabilityError] = useState<string | null>(null);
 
   const persist = useCallback((v: boolean) => {
     setIsDemo(v);
@@ -36,16 +43,33 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const enableDemo = useCallback(() => persist(true), [persist]);
+  const enableDemo = useCallback(() => {
+    setApiReachabilityError(null);
+    persist(true);
+  }, [persist]);
   const disableDemo = useCallback(() => persist(false), [persist]);
-  const toggleDemo = useCallback(() => persist(!isDemo), [persist, isDemo]);
+  const toggleDemo = useCallback(() => {
+    setApiReachabilityError(null);
+    persist(!isDemo);
+  }, [persist, isDemo]);
   const markBackendDown = useCallback(() => {
+    if (isStrictApiMode()) return;
     // Only auto-enable if not already in live mode explicitly
     if (!isDemo) persist(true);
   }, [persist, isDemo]);
 
   return (
-    <DemoContext.Provider value={{ isDemo, enableDemo, disableDemo, toggleDemo, markBackendDown }}>
+    <DemoContext.Provider
+      value={{
+        isDemo,
+        enableDemo,
+        disableDemo,
+        toggleDemo,
+        markBackendDown,
+        apiReachabilityError,
+        setApiReachabilityError,
+      }}
+    >
       {children}
     </DemoContext.Provider>
   );

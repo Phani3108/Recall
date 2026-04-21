@@ -276,6 +276,11 @@ def verify_oauth_state(state: str) -> dict | None:
     return _verify_state(state)
 
 
+def sign_oauth_state(payload: dict) -> str:
+    """Public wrapper for signing OAuth/OIDC state parameters."""
+    return _sign_state(payload)
+
+
 def get_provider_auth_method(provider: str) -> str:
     """Return 'oauth', 'api_key', or 'coming_soon' for a provider."""
     if provider in COMING_SOON_PROVIDERS:

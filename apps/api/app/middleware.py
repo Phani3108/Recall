@@ -23,9 +23,28 @@ AI_PATHS = {
     "/api/v1/pilot/",
     "/api/v1/context/search",
     "/api/v1/flow/",
+    "/api/agents/conversations/",
+    "/api/pilot/",
+    "/api/context/search",
+    "/api/flow/",
 }
-AUTH_PATHS = {"/api/v1/auth/login", "/api/v1/auth/register"}
-SKIP_AUDIT_PATHS = {"/api/v1/health", "/docs", "/openapi.json", "/redoc", "/metrics"}
+AUTH_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/oidc/login",
+    "/api/auth/oidc/callback",
+}
+SKIP_AUDIT_PATHS = {
+    "/api/v1/health",
+    "/api/health",
+    "/api/stripe/webhook",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/metrics",
+}
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

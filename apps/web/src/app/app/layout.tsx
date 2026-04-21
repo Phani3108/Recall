@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { DemoBanner } from "@/components/DemoBanner";
 import { DemoProvider } from "@/lib/demo";
 import { demoUser } from "@/lib/demo-data";
 import {
@@ -102,7 +103,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto flex flex-col">
+        <DemoBanner />
+        <div className="flex-1">{children}</div>
+      </main>
     </div>
   );
 }

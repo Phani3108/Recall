@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useDemo } from "@/lib/demo";
-import { users, orgSettings, type OrgSettings } from "@/lib/api";
+import { users, orgSettings, billing, ApiError, type OrgSettings, type BillingStatus } from "@/lib/api";
 import { demoUser, demoOrgSettings } from "@/lib/demo-data";
+import { isStrictApiMode } from "@/lib/strict-api";
 import {
   Key,
   Shield,
@@ -15,18 +16,19 @@ import {
   Loader2,
   AlertTriangle,
   Crown,
+  CreditCard,
 } from "lucide-react";
 
-type Tab = "profile" | "keys" | "license";
+type Tab = "profile" | "keys" | "license" | "billing";
 
 export default function SettingsPage() {
-  const user = demoUser;
   const [tab, setTab] = useState<Tab>("profile");
 
   const tabs = [
     { id: "profile" as Tab, label: "Profile", icon: User },
     { id: "keys" as Tab, label: "API Keys", icon: Key },
     { id: "license" as Tab, label: "License", icon: Shield },
+    { id: "billing" as Tab, label: "Billing", icon: CreditCard },
   ];
 
   return (
@@ -54,6 +56,7 @@ export default function SettingsPage() {
       {tab === "profile" && <ProfileTab />}
       {tab === "keys" && <ApiKeysTab />}
       {tab === "license" && <LicenseTab />}
+      {tab === "billing" && <BillingTab />}
     </div>
   );
 }
@@ -181,7 +184,7 @@ function ProfileTab() {
 
 /* ── API Keys Tab ── */
 function ApiKeysTab() {
-  const { isDemo, markBackendDown } = useDemo();
+  const { isDemo, markBackendDown, setApiReachabilityError } = useDemo();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -211,9 +214,15 @@ function ApiKeysTab() {
     try {
       const data = await orgSettings.get();
       setSettings(data);
-    } catch (err) {
-      markBackendDown();
-      setSettings(demoOrgSettings);
+    } catch {
+      if (isStrictApiMode()) {
+        setApiReachabilityError(
+          "Cannot reach the Recall API — check NEXT_PUBLIC_API_URL and that the backend is running.",
+        );
+      } else {
+        markBackendDown();
+        setSettings(demoOrgSettings);
+      }
     } finally {
       setLoading(false);
     }
@@ -376,7 +385,7 @@ function ApiKeysTab() {
 
 /* ── License Tab ── */
 function LicenseTab() {
-  const { isDemo, markBackendDown } = useDemo();
+  const { isDemo, markBackendDown, setApiReachabilityError } = useDemo();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [licenseKey, setLicenseKey] = useState("");
@@ -398,8 +407,14 @@ function LicenseTab() {
       const data = await orgSettings.get();
       setSettings(data);
     } catch {
-      markBackendDown();
-      setSettings(demoOrgSettings);
+      if (isStrictApiMode()) {
+        setApiReachabilityError(
+          "Cannot reach the Recall API — check NEXT_PUBLIC_API_URL and that the backend is running.",
+        );
+      } else {
+        markBackendDown();
+        setSettings(demoOrgSettings);
+      }
     } finally {
       setLoading(false);
     }
@@ -551,6 +566,138 @@ function LicenseTab() {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+/* ── Billing Tab ── */
+function BillingTab() {
+  const { isDemo, setApiReachabilityError } = useDemo();
+  const [status, setStatus] = useState<BillingStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    const b = p.get("billing");
+    if (b === "success") {
+      setMsg("Payment received. It may take a moment for the subscription to show as active.");
+      if (!isDemo) {
+        billing.status().then(setStatus).catch(() => {});
+      }
+    } else if (b === "cancel") {
+      setMsg("Checkout was cancelled.");
+    }
+    if (b) {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("billing");
+      window.history.replaceState({}, "", `${u.pathname}${u.search}`);
+    }
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    billing
+      .status()
+      .then(setStatus)
+      .catch(() => {
+        if (isStrictApiMode()) {
+          setApiReachabilityError("Cannot reach the Recall API — billing status could not be loaded.");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [isDemo, setApiReachabilityError]);
+
+  const startCheckout = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const { url } = await billing.checkoutSession();
+      if (url) window.location.href = url;
+    } catch (e: unknown) {
+      setMsg(e instanceof ApiError ? e.detail : "Checkout failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (isDemo) {
+    return (
+      <section className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <CreditCard className="w-5 h-5 text-[var(--accent)]" />
+          <h2 className="text-lg font-semibold text-white">Billing</h2>
+        </div>
+        <p className="text-sm text-gray-400">Switch off demo mode and sign in to manage a real subscription.</p>
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <section className="glass-card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <CreditCard className="w-5 h-5 text-[var(--accent)]" />
+        <h2 className="text-lg font-semibold text-white">Billing</h2>
+      </div>
+      <p className="text-sm text-gray-400 mb-6">
+        Stripe Checkout for this workspace. Requires <code className="text-gray-300">STRIPE_SECRET_KEY</code> and{" "}
+        <code className="text-gray-300">STRIPE_PRICE_ID</code> on the API.
+      </p>
+
+      {msg && (
+        <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/25 text-gray-200 rounded-lg p-3 text-sm mb-4">
+          {msg}
+        </div>
+      )}
+
+      {!status?.checkout_configured ? (
+        <p className="text-sm text-gray-400">
+          Billing is not enabled on this server (missing Stripe keys or price id).
+        </p>
+      ) : (
+        <>
+          <div className="bg-white/5 rounded-lg p-4 mb-6 text-sm space-y-2 text-gray-300">
+            <div className="flex justify-between gap-4">
+              <span>Subscription status</span>
+              <span className="text-white font-medium">{status.subscription_status}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>Stripe customer</span>
+              <span className="text-white font-mono text-xs truncate max-w-[200px]">
+                {status.stripe_customer_id ?? "—"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>Stripe subscription</span>
+              <span className="text-white font-mono text-xs truncate max-w-[200px]">
+                {status.stripe_subscription_id ?? "—"}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={startCheckout}
+            disabled={busy}
+            className="bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-white rounded-lg px-6 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+            {busy ? "Redirecting…" : "Open Stripe Checkout"}
+          </button>
+        </>
+      )}
     </section>
   );
 }

@@ -5,6 +5,7 @@ from app.api.routes import (
     agents,
     analytics,
     auth,
+    billing,
     comments,
     context,
     flow,
@@ -13,9 +14,11 @@ from app.api.routes import (
     integrations,
     knowledge,
     notifications,
+    oidc_auth,
     orgs,
     pilot,
     skills,
+    stripe_webhook,
     teams,
     users,
     waitlist,
@@ -26,7 +29,10 @@ api_router = APIRouter()
 
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(oidc_auth.router, prefix="/auth/oidc", tags=["oidc"])
+api_router.include_router(stripe_webhook.router, prefix="/stripe", tags=["stripe"])
 api_router.include_router(orgs.router, prefix="/orgs", tags=["organizations"])
+api_router.include_router(billing.router, prefix="/orgs/billing", tags=["billing"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
 api_router.include_router(context.router, prefix="/context", tags=["context"])

@@ -62,36 +62,6 @@ services:
     volumes:
       - miniodata:/data
 
-  # ── Workflow Engine — optional; API does not register Temporal workflows yet
-  temporal:
-    profiles: ["extras"]
-    image: temporalio/auto-setup:1.25
-    restart: unless-stopped
-    ports:
-      - "7233:7233"
-    environment:
-      DB: postgresql
-      DB_PORT: 5432
-      POSTGRES_USER: recall
-      POSTGRES_PWD: recall
-      POSTGRES_SEEDS: postgres
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  temporal-ui:
-    profiles: ["extras"]
-    image: temporalio/ui:2.31.2
-    restart: unless-stopped
-    ports:
-      - "8088:8080"
-    environment:
-      TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:3000
-    depends_on:
-      - temporal
-
   # ── AI Model Router ──
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -122,7 +92,6 @@ services:
       WEAVIATE_URL: http://weaviate:8080
       LITELLM_PROXY_URL: http://litellm:4000
       LITELLM_MASTER_KEY: sk-recall-dev
-      TEMPORAL_HOST: temporal:7233
       S3_ENDPOINT: http://minio:9000
       APP_ENV: development
       APP_SECRET_KEY: dev-secret-change-in-prod

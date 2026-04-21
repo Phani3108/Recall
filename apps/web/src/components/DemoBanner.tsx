@@ -1,28 +1,44 @@
 "use client";
 
 import { useDemo } from "@/lib/demo";
-import { Eye, EyeOff, Wifi, WifiOff } from "lucide-react";
+import { Eye, Wifi, WifiOff } from "lucide-react";
 
 export function DemoBanner() {
-  const { isDemo, toggleDemo } = useDemo();
-
-  if (!isDemo) return null;
+  const { isDemo, toggleDemo, apiReachabilityError, setApiReachabilityError } = useDemo();
 
   return (
-    <div className="bg-[var(--accent)]/10 border-b border-[var(--accent)]/20 px-4 py-2 flex items-center justify-between">
-      <div className="flex items-center gap-2 text-sm text-[var(--accent)]">
-        <Eye className="w-4 h-4" />
-        <span className="font-medium">Demo Mode</span>
-        <span className="text-gray-400">— Showing sample data. Connect backend or sign in for live data.</span>
-      </div>
-      <button
-        onClick={toggleDemo}
-        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
-      >
-        <WifiOff className="w-3 h-3" />
-        Exit Demo
-      </button>
-    </div>
+    <>
+      {apiReachabilityError && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between gap-3">
+          <p className="text-sm text-amber-200">{apiReachabilityError}</p>
+          <button
+            type="button"
+            onClick={() => setApiReachabilityError(null)}
+            className="text-xs text-amber-100/80 hover:text-amber-50 shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      {isDemo && (
+        <div className="bg-[var(--accent)]/10 border-b border-[var(--accent)]/20 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-[var(--accent)]">
+            <Eye className="w-4 h-4" />
+            <span className="font-medium">Demo Mode</span>
+            <span className="text-gray-400">
+              — Showing sample data. Connect backend or sign in for live data.
+            </span>
+          </div>
+          <button
+            onClick={toggleDemo}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+          >
+            <WifiOff className="w-3 h-3" />
+            Exit Demo
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { integrations as integrationsApi, type Integration } from "@/lib/api";
 import { useDemo } from "@/lib/demo";
+import { isStrictApiMode } from "@/lib/strict-api";
 import { demoIntegrations } from "@/lib/demo-data";
 
 type ProviderDef = {
@@ -206,7 +207,7 @@ function ApiKeyModal({
 }
 
 export default function IntegrationsPage() {
-  const { isDemo, markBackendDown } = useDemo();
+  const { isDemo, markBackendDown, setApiReachabilityError } = useDemo();
   const [integrationsList, setIntegrationsList] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [providerFieldsMap, setProviderFieldsMap] = useState<Record<string, ProviderMeta>>({});
@@ -238,11 +239,17 @@ export default function IntegrationsPage() {
       integrationsApi.providerFields().then(setProviderFieldsMap),
     ])
       .catch(() => {
-        markBackendDown();
-        setIntegrationsList(demoIntegrations);
+        if (isStrictApiMode()) {
+          setApiReachabilityError(
+            "Cannot reach the Recall API — check NEXT_PUBLIC_API_URL and that the backend is running.",
+          );
+        } else {
+          markBackendDown();
+          setIntegrationsList(demoIntegrations);
+        }
       })
       .finally(() => setLoading(false));
-  }, [isDemo, markBackendDown]);
+  }, [isDemo, markBackendDown, setApiReachabilityError]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -359,6 +366,15 @@ export default function IntegrationsPage() {
           {connectedCount > 0 && (
             <span className="text-[var(--accent)] ml-2">{connectedCount} connected</span>
           )}
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-white/10 bg-white/[0.03] p-4 text-sm text-gray-300">
+        <p className="font-medium text-white mb-1">How connections work</p>
+        <p>
+          OAuth providers open in a popup and store tokens per organization (encrypted server-side). When OAuth is
+          not configured for a provider, you can paste an API key or PAT in the modal instead. Composio can also be
+          used from the API for managed OAuth; this screen uses Recall&apos;s native integration routes.
         </p>
       </div>
 

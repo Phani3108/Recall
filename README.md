@@ -68,10 +68,10 @@ Three products, one unified context graph:
 | 🗄️ Database | PostgreSQL 16, Alembic migrations |
 | 🔎 Search | Weaviate (vector + BM25 hybrid), SQL ILIKE fallback |
 | 🤖 LLM | LiteLLM proxy (OpenAI, Anthropic, any provider) |
-| 🔐 Auth | JWT (HS256), bcrypt password hashing |
+| 🔐 Auth | JWT (HS256), bcrypt passwords, optional OIDC SSO (`/api/auth/oidc/*`) |
 | 🔗 Integrations | Composio (Slack, GitHub, Jira, Notion, Google, etc.) |
 | 📦 Monorepo | Turborepo + pnpm workspaces |
-| 🐳 Infra | Docker Compose — core: Postgres, Redis, Weaviate, LiteLLM, API, Web. **Optional profile `extras`:** Temporal (+ UI), MinIO (S3) for future workflows / attachments |
+| 🐳 Infra | Docker Compose — core: Postgres, Redis, Weaviate, LiteLLM, API, Web. **Optional profile `extras`:** MinIO (S3-compatible) for attachments / file workflows when you enable storage |
 
 ---
 
@@ -107,7 +107,7 @@ docker compose up -d
 
 This starts the **default** stack: Postgres (`:5434`), Redis (`:6380`), Weaviate (`:8080`), LiteLLM (`:4000`), API (`:8000`), Web (`:3000`).
 
-**Optional** Temporal, Temporal UI, and MinIO (not required by the API today):
+**Optional** MinIO for S3-compatible storage (not required by the API until you configure `S3_*` and use file features):
 
 ```bash
 docker compose --profile extras up -d
@@ -199,7 +199,8 @@ Recall/
 | 📋 Flow | `GET/POST/PATCH/DELETE /flow/tasks`, `/stats/summary` | Task management |
 | 🤖 Pilot | `GET/POST /pilot/delegations`, `/delegations/suggest`, `/approve`, `/reject`, `/undo`, `/execute`, `/stats` | Delegation inbox + structured execution payload |
 | ⚡ Skills | CRUD + `/vote` | Reusable AI workflows |
-| 📊 Governance | `GET /governance/dashboard`, `/audit-logs` | Usage tracking |
+| 📊 Governance | `GET /governance/dashboard`, `/audit-logs`, `/audit-logs/export` (JSONL) | Usage tracking + SIEM export |
+| 💳 Billing | `POST /orgs/billing/checkout-session`, `GET /orgs/billing/status` | Stripe Checkout (owner) |
 
 ---
 
@@ -217,9 +218,13 @@ Key settings:
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection | ✅ |
 | `APP_SECRET_KEY` | JWT signing key | ✅ |
+| `API_URL` / `FRONTEND_URL` | Absolute URLs for OIDC redirects and Stripe return URLs | ❌ (defaults for local dev) |
 | `OPENAI_API_KEY` | LLM provider key | ❌ (mock mode works without it) |
 | `COMPOSIO_API_KEY` | Integration OAuth flows | ❌ |
 | `WEAVIATE_URL` | Vector search | ❌ (SQL fallback available) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` | Org billing (Checkout + webhooks) | ❌ |
+| `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Browser SSO login | ❌ |
+| `NEXT_PUBLIC_STRICT_API` (web) | When `true`, do not auto-fallback to demo data if the API is down | ❌ |
 
 > 💡 **Mock mode**: When no LLM API key is set, Ask returns contextual mock responses using your seed data — perfect for development.
 

@@ -348,6 +348,19 @@ export const orgs = {
   members: () => apiFetch<OrgMember[]>("/orgs/members"),
 };
 
+export interface BillingStatus {
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: string;
+  checkout_configured: boolean;
+}
+
+export const billing = {
+  checkoutSession: () =>
+    apiFetch<{ url: string }>("/orgs/billing/checkout-session", { method: "POST" }),
+  status: () => apiFetch<BillingStatus>("/orgs/billing/status"),
+};
+
 // ── Integrations ──
 
 export const integrations = {
@@ -586,6 +599,32 @@ export const governance = {
     }),
   securityStatus: () => apiFetch<SecurityStatus>("/governance/security/status"),
   metrics: () => apiFetch<MetricsSnapshot>("/governance/metrics"),
+
+  /** NDJSON attachment — use fetch directly because `apiFetch` assumes JSON bodies. */
+  exportAuditJsonl: async (limit = 5000): Promise<Blob> => {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/governance/audit-logs/export?limit=${limit}`, { headers });
+    if (res.status === 401) {
+      clearToken();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+      throw new ApiError(401, "Unauthorized");
+    }
+    if (!res.ok) {
+      let detail = "Export failed";
+      try {
+        const j: { detail?: string } = await res.json();
+        detail = j.detail || detail;
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, detail);
+    }
+    return res.blob();
+  },
 };
 
 // ── Knowledge Graph ──

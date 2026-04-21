@@ -1,4 +1,7 @@
+import json as json_lib
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -116,6 +119,49 @@ async def list_audit_logs(
         )
         for log in logs
     ]
+
+
+@router.get("/audit-logs/export")
+async def export_audit_logs_jsonl(
+    ctx: OrgContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=5000, ge=1, le=100_000),
+) -> StreamingResponse:
+    """Download audit entries as newline-delimited JSON (JSONL) for SIEM / compliance."""
+    ctx.require_role("owner", "admin")
+
+    result = await db.execute(
+        select(AuditLog)
+        .where(AuditLog.org_id == ctx.org_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+    )
+    logs = result.scalars().all()
+
+    def row_iter():
+        for log in logs:
+            action = log.action.value if hasattr(log.action, "value") else str(log.action)
+            row = {
+                "id": str(log.id),
+                "user_id": str(log.user_id) if log.user_id else None,
+                "action": action,
+                "resource_type": log.resource_type,
+                "resource_id": str(log.resource_id) if log.resource_id else None,
+                "detail": log.detail,
+                "tokens_consumed": log.tokens_consumed,
+                "cost_usd": float(log.cost_usd or 0),
+                "model_used": log.model_used,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            yield json_lib.dumps(row, default=str) + "\n"
+
+    return StreamingResponse(
+        row_iter(),
+        media_type="application/x-ndjson",
+        headers={
+            "Content-Disposition": f'attachment; filename="recall-audit-{ctx.org_id}.jsonl"',
+        },
+    )
 
 
 # ── Retention ─────────────────────────────────────────────────────
