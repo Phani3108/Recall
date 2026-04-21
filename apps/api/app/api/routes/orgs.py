@@ -1,21 +1,21 @@
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.db.models import Organization, OrgMembership, User
-from app.api.deps import get_org_context, OrgContext
+from app.api.deps import OrgContext, get_org_context
 from app.api.schemas import (
-    OrgResponse,
-    OrgMemberResponse,
-    PlatformKeysUpdate,
-    PlatformKeysResponse,
     LicenseActivateRequest,
     LicenseResponse,
+    OrgMemberResponse,
+    OrgResponse,
     OrgSettingsResponse,
+    PlatformKeysResponse,
+    PlatformKeysUpdate,
 )
+from app.db.models import OrgMembership, User
+from app.db.session import get_db
 
 router = APIRouter()
 

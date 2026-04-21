@@ -189,7 +189,7 @@ async def _index_entities_to_weaviate(
 ) -> int:
     """Best-effort index synced entities into Weaviate for hybrid search."""
     try:
-        from app.services.context_engine import index_entity, ensure_collection_exists
+        from app.services.context_engine import ensure_collection_exists, index_entity
         await ensure_collection_exists()
     except Exception:
         logger.warning("Weaviate unavailable, skipping vector indexing")
@@ -334,7 +334,7 @@ async def _sync_github(config: dict, since: datetime | None = None) -> list[dict
                         "extra_data": {
                             "source_integration": "github", "type": kind,
                             "state": issue["state"],
-                            "labels": [l["name"] for l in issue.get("labels", [])],
+                            "labels": [lab["name"] for lab in issue.get("labels", [])],
                         },
                     })
             except Exception:
@@ -910,7 +910,7 @@ async def _sync_figma(config: dict, since: datetime | None = None) -> list[dict]
         # Get recent files from teams/projects
         me = resp.json()
         teams_resp = await client.get(
-            f"https://api.figma.com/v1/me/files?page_size=30",
+            "https://api.figma.com/v1/me/files?page_size=30",
             headers=headers,
         )
         # /me/files may not exist — try projects
@@ -931,7 +931,7 @@ async def _sync_figma(config: dict, since: datetime | None = None) -> list[dict]
                 "source_id": f"figma:user:{me.get('id', 'unknown')}",
                 "entity_type": "person",
                 "title": f"[Figma] {me.get('handle', me.get('email', 'User'))}",
-                "content": f"Connected Figma account",
+                "content": "Connected Figma account",
                 "source_url": "",
                 "extra_data": {"source_integration": "figma", "type": "user"},
             })

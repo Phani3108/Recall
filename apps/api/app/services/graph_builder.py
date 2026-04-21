@@ -17,7 +17,7 @@ import re
 import uuid
 from typing import Any
 
-from sqlalchemy import select, and_, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ContextEntity, EntityRelation
@@ -184,8 +184,6 @@ async def _find_entities_by_extra(
     limit: int = 20,
 ) -> list[uuid.UUID]:
     """Find entities in the same org where extra_data[field] matches value."""
-    from sqlalchemy import cast, String
-    from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 
     if array_field:
         # For array fields like "labels": check if value is in the array
@@ -364,7 +362,6 @@ async def get_graph_for_org(
         })
 
     # Fetch relations (edges) between those entities
-    from sqlalchemy import or_
     result = await db.execute(
         select(EntityRelation)
         .where(

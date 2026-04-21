@@ -1,16 +1,16 @@
 from app.db.base import Base
 from app.db.models import (
-    Organization,
-    User,
-    OrgMembership,
-    Integration,
-    ContextEntity,
-    EntityRelation,
-    Conversation,
-    Message,
-    Skill,
     AuditLog,
+    ContextEntity,
+    Conversation,
+    EntityRelation,
+    Integration,
+    Message,
+    Organization,
+    OrgMembership,
+    Skill,
     TokenBudget,
+    User,
 )
 
 __all__ = [

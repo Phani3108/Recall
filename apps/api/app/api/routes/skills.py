@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.db.models import Skill
-from app.api.deps import get_org_context, OrgContext
+from app.api.deps import OrgContext, get_org_context
 from app.api.schemas import SkillCreate, SkillResponse
-from app.services.skill_executor import execute_skill, BUILTIN_SKILLS
+from app.db.models import Skill
+from app.db.session import get_db
+from app.services.skill_executor import BUILTIN_SKILLS, execute_skill
 
 router = APIRouter()
 

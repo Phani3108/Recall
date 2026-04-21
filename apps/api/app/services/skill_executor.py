@@ -12,19 +12,17 @@ Template variables ({{trigger.*}}, {{steps[n].*}}) are resolved at runtime.
 
 import logging
 import re
-import uuid
-from datetime import datetime, UTC
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
-    Skill,
+    AuditAction,
+    AuditLog,
     Integration,
     IntegrationProvider,
-    AuditLog,
-    AuditAction,
+    Skill,
 )
 from app.services.tool_adapters import TOOL_REGISTRY
 from app.services.tool_adapters.base import ToolResult

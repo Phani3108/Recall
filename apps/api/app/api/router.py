@@ -1,6 +1,25 @@
 from fastapi import APIRouter
 
-from app.api.routes import health, auth, orgs, users, integrations, context, agents, governance, flow, pilot, skills, admin, waitlist, knowledge, notifications, teams, comments, analytics
+from app.api.routes import (
+    admin,
+    agents,
+    analytics,
+    auth,
+    comments,
+    context,
+    flow,
+    governance,
+    health,
+    integrations,
+    knowledge,
+    notifications,
+    orgs,
+    pilot,
+    skills,
+    teams,
+    users,
+    waitlist,
+)
 from app.api.routes import agent as agent_loop
 
 api_router = APIRouter()

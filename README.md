@@ -71,7 +71,15 @@ Three products, one unified context graph:
 | 🔐 Auth | JWT (HS256), bcrypt password hashing |
 | 🔗 Integrations | Composio (Slack, GitHub, Jira, Notion, Google, etc.) |
 | 📦 Monorepo | Turborepo + pnpm workspaces |
-| 🐳 Infra | Docker Compose (Postgres, Redis, Weaviate, MinIO, Temporal, LiteLLM) |
+| 🐳 Infra | Docker Compose — core: Postgres, Redis, Weaviate, LiteLLM, API, Web. **Optional profile `extras`:** Temporal (+ UI), MinIO (S3) for future workflows / attachments |
+
+---
+
+## 🎯 Product positioning
+
+Recall is a **team / org “Work OS”** (connected SaaS + governed AI + human-approved actions). The ideal customer is a **small or mid-size team** that lives in Slack, GitHub, Jira, and similar tools—not a solo user looking for a markdown vault.
+
+**Compared to Obsidian or Joplin:** those products are **personal knowledge bases** (local notes, markdown, plugins, offline). Recall does not compete on the same axis today. If you need Obsidian-like **local-first PKM**, that would be a **separate product wedge** (markdown import/export, E2E encryption, offline read) and is **out of scope** for the current codebase unless explicitly prioritized.
 
 ---
 
@@ -97,7 +105,15 @@ pnpm install
 docker compose up -d
 ```
 
-This starts: Postgres (`:5434`), Redis (`:6380`), Weaviate (`:8080`), MinIO (`:9002`), LiteLLM (`:4000`)
+This starts the **default** stack: Postgres (`:5434`), Redis (`:6380`), Weaviate (`:8080`), LiteLLM (`:4000`), API (`:8000`), Web (`:3000`).
+
+**Optional** Temporal, Temporal UI, and MinIO (not required by the API today):
+
+```bash
+docker compose --profile extras up -d
+```
+
+The API uses **Redis-backed HTTP rate limiting** when `REDIS_RATE_LIMITING=true` and `APP_ENV` is not `test`; otherwise it uses an in-process limiter (fine for local dev).
 
 ### 3. Set up the API
 
@@ -181,7 +197,7 @@ Recall/
 | 🔎 Context | `POST /context/search` | Hybrid search |
 | 💬 Ask | Conversations CRUD + `/messages`, `/messages/stream` | RAG chat + SSE streaming |
 | 📋 Flow | `GET/POST/PATCH/DELETE /flow/tasks`, `/stats/summary` | Task management |
-| 🤖 Pilot | `GET/POST /pilot/delegations`, `/approve`, `/reject`, `/undo`, `/stats` | Delegation inbox |
+| 🤖 Pilot | `GET/POST /pilot/delegations`, `/delegations/suggest`, `/approve`, `/reject`, `/undo`, `/execute`, `/stats` | Delegation inbox + structured execution payload |
 | ⚡ Skills | CRUD + `/vote` | Reusable AI workflows |
 | 📊 Governance | `GET /governance/dashboard`, `/audit-logs` | Usage tracking |
 

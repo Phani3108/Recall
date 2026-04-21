@@ -2,12 +2,16 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import OrgContext, get_org_context
 from app.db.session import get_db
-from app.api.deps import get_org_context, OrgContext
-from app.services.graph_builder import get_graph_for_org, get_entity_neighbors, build_relations_for_org
+from app.services.graph_builder import (
+    build_relations_for_org,
+    get_entity_neighbors,
+    get_graph_for_org,
+)
 
 router = APIRouter()
 
@@ -70,7 +74,8 @@ async def graph_stats(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get knowledge graph statistics."""
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from app.db.models import ContextEntity, EntityRelation
 
     # Count nodes

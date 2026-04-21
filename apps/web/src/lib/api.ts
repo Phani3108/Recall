@@ -217,6 +217,8 @@ export interface DelegationItem {
   resolved_by_user_id: string | null;
   resolved_at: string | null;
   execution_result: Record<string, unknown> | null;
+  /** Structured tool call when set — preferred over parsing ``action`` at execute time */
+  execution_payload?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -481,11 +483,22 @@ export const pilot = {
     reason: string;
     tool: string;
     confidence: number;
+    proposed_for_user_id?: string;
+    execution_payload?: Record<string, unknown> | null;
   }) =>
     apiFetch<DelegationItem>("/pilot/delegations", {
       method: "POST",
       body: JSON.stringify(delegation),
     }),
+
+  suggestPayload: (action: string, tool?: string | null) =>
+    apiFetch<{ execution_payload: Record<string, unknown> | null; source: string }>(
+      "/pilot/delegations/suggest",
+      {
+        method: "POST",
+        body: JSON.stringify({ action, tool: tool ?? null }),
+      },
+    ),
 
   approve: (delegationId: string) =>
     apiFetch<DelegationItem>(`/pilot/delegations/${delegationId}/approve`, {

@@ -2,16 +2,22 @@
 
 import logging
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import OrgContext, get_org_context
+from app.api.schemas import (
+    DelegationCreate,
+    DelegationResponse,
+    DelegationSuggestRequest,
+    DelegationSuggestResponse,
+)
+from app.db.models import AuditAction, AuditLog, Delegation, DelegationStatus
 from app.db.session import get_db
-from app.db.models import Delegation, DelegationStatus, AuditLog, AuditAction
-from app.api.deps import get_org_context, OrgContext
-from app.api.schemas import DelegationCreate, DelegationResponse
+from app.services.delegation_payload import suggest_execution_payload
 from app.services.execution_engine import execute_delegation
 
 logger = logging.getLogger(__name__)
@@ -31,6 +37,7 @@ def _delegation_to_response(d: Delegation) -> DelegationResponse:
         resolved_by_user_id=d.resolved_by_user_id,
         resolved_at=d.resolved_at,
         execution_result=d.execution_result,
+        execution_payload=d.execution_payload if isinstance(d.execution_payload, dict) else None,
         created_at=d.created_at,
     )
 
@@ -60,6 +67,7 @@ async def create_delegation(
     ctx: OrgContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> DelegationResponse:
+    ep = req.execution_payload if isinstance(req.execution_payload, dict) else None
     delegation = Delegation(
         org_id=ctx.org_id,
         action=req.action,
@@ -68,6 +76,7 @@ async def create_delegation(
         confidence=req.confidence,
         status=DelegationStatus.PENDING,
         proposed_for_user_id=req.proposed_for_user_id or ctx.user_id,
+        execution_payload=ep,
     )
     db.add(delegation)
     await db.flush()
@@ -83,6 +92,16 @@ async def create_delegation(
     ))
 
     return _delegation_to_response(delegation)
+
+
+@router.post("/delegations/suggest", response_model=DelegationSuggestResponse)
+async def suggest_delegation_payload(
+    req: DelegationSuggestRequest,
+    _: OrgContext = Depends(get_org_context),
+) -> DelegationSuggestResponse:
+    """Suggest a structured ``execution_payload`` from natural language (regex, then LLM)."""
+    payload, source = await suggest_execution_payload(req.action, req.tool)
+    return DelegationSuggestResponse(execution_payload=payload, source=source)
 
 
 @router.post("/delegations/{delegation_id}/approve", response_model=DelegationResponse)
@@ -121,7 +140,7 @@ async def approve_delegation(
     # Auto-execute if requested
     if auto_execute:
         try:
-            exec_result = await execute_delegation(delegation, db)
+            await execute_delegation(delegation, db)
             # execution_engine updates delegation status and records result
         except Exception as e:
             logger.warning("Auto-execution failed for delegation %s: %s", delegation_id, e)

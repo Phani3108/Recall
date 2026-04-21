@@ -12,13 +12,13 @@ Falls back to template-based generation when in mock mode.
 
 import logging
 import uuid
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentProposal, AgentConfig
 from app.agents.observer import Observation
+from app.db.models import AgentConfig, AgentProposal
 
 logger = logging.getLogger(__name__)
 

@@ -1,29 +1,32 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.router import api_router
 from app.config import settings
 from app.db.session import engine
-from app.api.router import api_router
 from app.middleware import (
     GovernanceMiddleware,
-    TokenBudgetMiddleware,
+    MetricsMiddleware,
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
-    MetricsMiddleware,
+    TokenBudgetMiddleware,
 )
+from app.services import rate_limiter as rate_limiter_service
 from app.services.metrics_service import metrics
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup
-    yield
-    # Shutdown
-    await engine.dispose()
+    await rate_limiter_service.init_limiters()
+    try:
+        yield
+    finally:
+        await rate_limiter_service.shutdown_limiters()
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:

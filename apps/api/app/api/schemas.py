@@ -2,8 +2,8 @@
 
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
 
+from pydantic import BaseModel, EmailStr, Field
 
 # ── Shared ──
 
@@ -238,6 +238,18 @@ class DelegationCreate(BaseModel):
     tool: str = Field(min_length=1, max_length=100)
     confidence: float = Field(ge=0.0, le=1.0)
     proposed_for_user_id: uuid.UUID | None = None
+    # Optional structured call — preferred over parsing ``action`` at execute time
+    execution_payload: dict | None = None
+
+
+class DelegationSuggestRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=4000)
+    tool: str | None = Field(default=None, max_length=100)
+
+
+class DelegationSuggestResponse(BaseModel):
+    execution_payload: dict | None
+    source: str  # regex | llm | none
 
 
 class DelegationResponse(BaseModel):
@@ -251,6 +263,7 @@ class DelegationResponse(BaseModel):
     resolved_by_user_id: uuid.UUID | None
     resolved_at: datetime | None
     execution_result: dict | None
+    execution_payload: dict | None = None
     created_at: datetime
 
 

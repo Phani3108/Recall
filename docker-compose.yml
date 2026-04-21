@@ -47,8 +47,9 @@ services:
     volumes:
       - weaviatedata:/var/lib/weaviate
 
-  # ── Object Storage (S3-compatible) ──
+  # ── Object Storage (S3-compatible) — optional; API does not require MinIO yet
   minio:
+    profiles: ["extras"]
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -61,8 +62,9 @@ services:
     volumes:
       - miniodata:/data
 
-  # ── Workflow Engine ──
+  # ── Workflow Engine — optional; API does not register Temporal workflows yet
   temporal:
+    profiles: ["extras"]
     image: temporalio/auto-setup:1.25
     restart: unless-stopped
     ports:
@@ -79,6 +81,7 @@ services:
         condition: service_healthy
 
   temporal-ui:
+    profiles: ["extras"]
     image: temporalio/ui:2.31.2
     restart: unless-stopped
     ports:

@@ -6,7 +6,6 @@ Supports: Slack, Google, GitHub, Notion, Jira, Linear, Confluence, GitLab, Micro
 
 import logging
 import uuid
-from datetime import datetime
 
 import httpx
 

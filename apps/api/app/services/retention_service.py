@@ -8,12 +8,12 @@ Provides:
 
 import logging
 import uuid
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, delete, func
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ContextEntity, EntityRelation, AuditLog
+from app.db.models import AuditLog, ContextEntity, EntityRelation
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ async def purge_old_entities(
 
     # Best-effort: remove from Weaviate too
     try:
-        from app.services.context_engine import get_weaviate_client, COLLECTION_NAME
+        from app.services.context_engine import COLLECTION_NAME, get_weaviate_client
         client = get_weaviate_client()
         collection = client.collections.get(COLLECTION_NAME)
         for eid in entity_ids:
@@ -109,11 +109,6 @@ async def cleanup_orphan_relations(
     db: AsyncSession,
 ) -> int:
     """Remove entity relations where source or target entity no longer exists."""
-    # Find relation IDs where source or target is missing
-    from sqlalchemy.orm import aliased
-    source_alias = aliased(ContextEntity)
-    target_alias = aliased(ContextEntity)
-
     # Delete relations with missing source
     result1 = await db.execute(
         delete(EntityRelation).where(

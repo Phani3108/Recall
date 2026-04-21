@@ -1,16 +1,15 @@
 """Waitlist routes — collect early access signups (no auth required)."""
 
 import logging
-from datetime import datetime, UTC
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.api.deps import OrgContext, get_org_context
 from app.db.models import WaitlistEntry
-from app.api.deps import get_org_context, OrgContext
+from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
 

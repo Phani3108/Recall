@@ -1,16 +1,21 @@
 """Admin routes — full visibility for org owners/admins."""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.api.deps import OrgContext, get_org_context
+from app.api.schemas import AdminActivityRow, AdminOverview, AdminUserRow
 from app.db.models import (
-    User, Organization, OrgMembership, AuditLog, Integration,
-    Conversation, Task, Delegation,
+    AuditLog,
+    Conversation,
+    Delegation,
+    Integration,
+    OrgMembership,
+    Task,
+    User,
 )
-from app.api.deps import get_org_context, OrgContext
-from app.api.schemas import AdminOverview, AdminUserRow, AdminActivityRow
+from app.db.session import get_db
 
 router = APIRouter()
 

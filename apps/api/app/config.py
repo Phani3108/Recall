@@ -28,8 +28,9 @@ class Settings(BaseSettings):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
 
-    # Redis
+    # Redis (optional fixed-window rate limiting when not in test)
     redis_url: str = "redis://localhost:6380/0"
+    redis_rate_limiting: bool = True
 
     # Weaviate
     weaviate_url: str = "http://localhost:8080"
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     authentik_client_id: str = "recall"
     authentik_client_secret: str = ""
 
-    # Temporal
+    # Temporal (optional compose profile ``extras`` — not used by the API process yet)
     temporal_host: str = "localhost:7233"
     temporal_namespace: str = "recall"
 
@@ -93,6 +94,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
+
+    @property
+    def use_redis_rate_limiter(self) -> bool:
+        """Use Redis for HTTP rate limits in multi-replica deployments."""
+        if self.app_env == "test":
+            return False
+        return self.redis_rate_limiting
 
 
 settings = Settings()

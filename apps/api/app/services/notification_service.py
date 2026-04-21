@@ -5,11 +5,11 @@ Notifications are created by system events (sync complete, proposal created,
 delegation executed, etc.) and consumed by the frontend bell icon.
 """
 
-import uuid
 import logging
-from datetime import datetime, UTC
+import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Notification

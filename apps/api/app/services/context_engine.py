@@ -6,17 +6,14 @@ across all enterprise tools by providing relevant, permission-filtered context.
 
 from __future__ import annotations
 
-import uuid
 import hashlib
 import logging
-from typing import Any, TYPE_CHECKING
+import uuid
+from typing import Any
 
 import httpx
 
 from app.config import settings
-
-if TYPE_CHECKING:
-    import weaviate
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +76,7 @@ def get_weaviate_client():
 
 async def ensure_collection_exists() -> None:
     """Create the ContextEntity collection in Weaviate if it doesn't exist."""
-    from weaviate.classes.config import Configure, Property, DataType, VectorDistances
+    from weaviate.classes.config import Configure, DataType, Property, VectorDistances
 
     client = get_weaviate_client()
     try:
@@ -404,9 +401,10 @@ async def _sql_fallback_search(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """SQL-based text search fallback when Weaviate is unavailable."""
-    from sqlalchemy import select, or_
+    from sqlalchemy import or_, select
+
+    from app.db.models import ContextEntity
     from app.db.session import async_session_factory
-    from app.db.models import ContextEntity as CE
 
     # Extract meaningful words (3+ chars) for keyword search
     stop_words = {"the", "and", "for", "are", "but", "not", "you", "all", "can", "has", "her",
@@ -423,22 +421,22 @@ async def _sql_fallback_search(
         # Build OR conditions: match any keyword in title or content
         conditions = []
         for kw in keywords[:5]:  # limit to 5 keywords
-            conditions.append(CE.title.ilike(f"%{kw}%"))
-            conditions.append(CE.content.ilike(f"%{kw}%"))
+            conditions.append(ContextEntity.title.ilike(f"%{kw}%"))
+            conditions.append(ContextEntity.content.ilike(f"%{kw}%"))
 
         stmt = (
-            select(CE)
+            select(ContextEntity)
             .where(
-                CE.org_id == org_id,
+                ContextEntity.org_id == org_id,
                 or_(*conditions),
                 or_(
-                    CE.access_everyone == True,  # noqa: E712
-                    CE.access_user_ids.contains([str(user_id)]),
+                    ContextEntity.access_everyone == True,  # noqa: E712
+                    ContextEntity.access_user_ids.contains([str(user_id)]),
                 ),
             )
         )
         if entity_types:
-            stmt = stmt.where(CE.entity_type.in_(entity_types))
+            stmt = stmt.where(ContextEntity.entity_type.in_(entity_types))
         stmt = stmt.limit(limit)
 
         result = await session.execute(stmt)
@@ -479,7 +477,7 @@ async def _weaviate_search(
     try:
         collection = client.collections.get(COLLECTION_NAME)
 
-        from weaviate.classes.query import MetadataQuery, Filter
+        from weaviate.classes.query import Filter, MetadataQuery
 
         # Build filters: org_id + (access_everyone OR user_id in access_user_ids)
         org_filter = Filter.by_property("org_id").equal(str(org_id))

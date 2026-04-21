@@ -2,19 +2,19 @@
 
 import logging
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.db.models import AgentProposal, AgentConfig
-from app.api.deps import get_org_context, OrgContext
+from app.agents.learner import get_learning_summary, record_feedback
 from app.agents.observer import observe
 from app.agents.planner import plan
-from app.agents.learner import record_feedback, get_learning_summary
+from app.api.deps import OrgContext, get_org_context
+from app.db.models import AgentConfig, AgentProposal
+from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
 

@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.api.deps import OrgContext, get_org_context
+from app.api.schemas import ContextEntityResponse, ContextSearchRequest, ContextSearchResponse
 from app.db.models import ContextEntity
-from app.api.deps import get_org_context, OrgContext
-from app.api.schemas import ContextSearchRequest, ContextSearchResponse, ContextEntityResponse
+from app.db.session import get_db
 from app.services.context_engine import hybrid_search
 
 logger = logging.getLogger(__name__)

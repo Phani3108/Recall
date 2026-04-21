@@ -49,11 +49,10 @@ jobs:
         run: uv pip install --system -e ".[dev]"
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: ruff check app tests
 
       - name: Type check (mypy)
         run: mypy app/ --ignore-missing-imports
-        continue-on-error: true
 
       - name: Test
         run: pytest --cov=app --cov-report=xml -q
@@ -86,7 +85,6 @@ jobs:
 
       - name: Lint
         run: pnpm lint
-        continue-on-error: true
 
       - name: Build
         run: pnpm build

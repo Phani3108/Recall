@@ -1,15 +1,14 @@
 """Core domain models for Recall — the entity graph."""
 
+import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, Boolean, Integer, Float, ForeignKey, Enum, JSON, DateTime
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-import enum
 
 from app.db.base import BaseModel, TenantModel
-
 
 # ── Enums ──
 
@@ -386,6 +385,8 @@ class Delegation(TenantModel):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     execution_result: Mapped[dict | None] = mapped_column(JSONB)
+    # Structured tool call: {"tool": "github", "action": "close_issue", "params": {...}} — preferred over regex NL parse
+    execution_payload: Mapped[dict | None] = mapped_column(JSONB)
 
 
 # ── Waitlist ──

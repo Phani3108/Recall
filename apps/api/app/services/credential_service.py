@@ -6,8 +6,8 @@ Uses the app_secret_key (hashed to 32 bytes) as the Fernet key.
 
 import base64
 import hashlib
-import logging
 import json
+import logging
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken

@@ -4,14 +4,14 @@ Handles: context retrieval → prompt augmentation → LLM call → source attri
 When no API key is configured, returns realistic mock responses using available context.
 """
 
-import uuid
+import asyncio
 import json
 import logging
-import time
 import random
-import asyncio
-from dataclasses import dataclass, field
-from typing import AsyncGenerator
+import time
+import uuid
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 
 import httpx
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
-SYSTEM_PROMPT = """You are Ask, the AI assistant for Recall — an AI-native Work OS. 
+SYSTEM_PROMPT = """You are Ask, the AI assistant for Recall — an AI-native Work OS.
 You have access to the user's organization context from connected tools (Slack, GitHub, Jira, Notion, Google Workspace, etc.).
 
 Rules:
@@ -187,16 +187,26 @@ async def _call_llm(
     temperature: float = 0.3,
     max_tokens: int = 4096,
     api_key: str | None = None,
+    response_format: dict | None = None,
 ) -> dict:
     """Call LLM — direct OpenAI if api_key provided, otherwise LiteLLM proxy."""
     key = api_key or settings.openai_api_key
+    body: dict = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_format is not None:
+        body["response_format"] = response_format
+
     if key:
         # Direct OpenAI API call
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+                json=body,
             )
             resp.raise_for_status()
             return resp.json()
@@ -209,12 +219,7 @@ async def _call_llm(
                 "Authorization": f"Bearer {settings.litellm_master_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
+            json=body,
         )
         resp.raise_for_status()
         return resp.json()
@@ -463,36 +468,35 @@ async def chat_stream(
         auth_header = {"Authorization": f"Bearer {settings.litellm_master_key}", "Content-Type": "application/json"}
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{base_url}/chat/completions",
-                headers=auth_header,
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.3,
-                    "max_tokens": 4096,
-                    "stream": True,
-                },
-            ) as resp:
-                resp.raise_for_status()
-                full_content = ""
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
-                        text = delta.get("content", "")
-                        if text:
-                            full_content += text
-                            yield f"event: delta\ndata: {json.dumps(text)}\n\n"
-                    except json.JSONDecodeError:
-                        continue
+        async with httpx.AsyncClient(timeout=120.0) as client, client.stream(
+            "POST",
+            f"{base_url}/chat/completions",
+            headers=auth_header,
+            json={
+                "model": model,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 4096,
+                "stream": True,
+            },
+        ) as resp:
+            resp.raise_for_status()
+            full_content = ""
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    text = delta.get("content", "")
+                    if text:
+                        full_content += text
+                        yield f"event: delta\ndata: {json.dumps(text)}\n\n"
+                except json.JSONDecodeError:
+                    continue
 
         latency_ms = int((time.monotonic() - start_time) * 1000)
         tokens_est = len(full_content.split()) * 2

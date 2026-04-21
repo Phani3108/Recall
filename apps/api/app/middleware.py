@@ -5,15 +5,15 @@ rate limiting, security headers, and metrics collection.
 import logging
 import time
 
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
-from sqlalchemy import select
+from starlette.responses import JSONResponse, Response
 
-from app.db.session import async_session_factory
 from app.db.models import TokenBudget
-from app.services.rate_limiter import api_limiter, ai_limiter, auth_limiter
+from app.db.session import async_session_factory
 from app.services.metrics_service import metrics
+from app.services.rate_limiter import ai_limiter, api_limiter, auth_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         else:
             limiter = api_limiter
 
-        allowed, headers = limiter.allow(client_ip)
+        allowed, headers = await limiter.allow(client_ip)
 
         if not allowed:
             return JSONResponse(

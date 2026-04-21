@@ -14,10 +14,10 @@ Each detector returns a list of Observation dicts ready for the PlannerAgent.
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ContextEntity, EntityType, Task, TaskStatus
@@ -101,7 +101,7 @@ async def detect_blocked_tickets(
     observations: list[Observation] = []
     for entity in entities:
         extra = entity.extra_data or {}
-        labels = [l.lower() for l in extra.get("labels", [])]
+        labels = [lbl.lower() for lbl in extra.get("labels", [])]
         status = (extra.get("status") or "").lower()
         source = extra.get("source_integration", "")
 

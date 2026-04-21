@@ -3,15 +3,15 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import OrgContext, get_org_context
 from app.db.session import get_db
-from app.api.deps import get_org_context, OrgContext
 from app.services.analytics_engine import (
-    get_token_trends,
-    get_productivity_stats,
-    get_top_ai_users,
-    get_integration_health,
     get_agent_intelligence,
     get_cost_forecast,
+    get_integration_health,
+    get_productivity_stats,
+    get_token_trends,
+    get_top_ai_users,
 )
 
 router = APIRouter()

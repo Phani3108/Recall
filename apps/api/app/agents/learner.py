@@ -15,12 +15,13 @@ Learning data schema (stored in AgentConfig.learning_data):
 
 import logging
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentProposal, AgentConfig, Delegation, DelegationStatus
+from app.db.models import AgentConfig, AgentProposal, Delegation, DelegationStatus
+from app.services.execution_engine import build_execution_payload_best_effort
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,10 @@ async def record_feedback(
             proposed_for_user_id=user_id,
             resolved_by_user_id=user_id,
             resolved_at=datetime.now(UTC),
+            execution_payload=build_execution_payload_best_effort(
+                proposal.suggested_action,
+                proposal.tool,
+            ),
         )
         db.add(delegation)
         await db.flush()

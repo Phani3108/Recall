@@ -10,23 +10,21 @@ This is the bridge between the Pilot (delegation proposals) and the Tool Adapter
 5. Logs the execution in the audit trail
 """
 
-import json
 import logging
 import re
-import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AuditAction,
+    AuditLog,
     Delegation,
     DelegationStatus,
     Integration,
     IntegrationProvider,
-    AuditLog,
-    AuditAction,
 )
 from app.services.tool_adapters import TOOL_REGISTRY
 from app.services.tool_adapters.base import ToolResult
@@ -88,6 +86,34 @@ def parse_delegation_action(action_text: str, tool_hint: str | None = None) -> d
     return None
 
 
+def normalize_execution_payload(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return ``{tool, action, params}`` if the payload is valid for a registered adapter."""
+    if not raw or not isinstance(raw, dict):
+        return None
+    tool = raw.get("tool")
+    action = raw.get("action")
+    params = raw.get("params")
+    if not isinstance(tool, str) or not isinstance(action, str):
+        return None
+    if not isinstance(params, dict):
+        params = {}
+    tool_cls = TOOL_REGISTRY.get(tool)
+    if not tool_cls:
+        return None
+    adapter = tool_cls()
+    if action not in adapter.supported_actions:
+        return None
+    return {"tool": tool, "action": action, "params": params}
+
+
+def build_execution_payload_best_effort(action_text: str, tool_hint: str | None) -> dict[str, Any] | None:
+    """Best-effort structured payload from natural language (regex templates only)."""
+    parsed = parse_delegation_action(action_text, tool_hint=tool_hint)
+    if not parsed:
+        return None
+    return normalize_execution_payload(parsed)
+
+
 # ── Execution ──
 
 
@@ -97,15 +123,19 @@ async def execute_delegation(
 ) -> ToolResult:
     """Execute an approved delegation by routing it to the appropriate tool adapter.
 
-    1. Parse the action text to determine tool + action + params
-    2. Look up integration config
-    3. Execute via tool adapter
+    1. Prefer ``delegation.execution_payload`` when valid
+    2. Else parse natural-language ``action`` (regex + fallbacks)
+    3. Look up integration config and invoke the tool adapter
     4. Record result
     """
-    # Parse the action
-    parsed = parse_delegation_action(delegation.action, tool_hint=delegation.tool)
+    parsed = normalize_execution_payload(
+        delegation.execution_payload
+        if isinstance(delegation.execution_payload, dict)
+        else None
+    )
     if not parsed:
-        # If parsing fails, try using the tool directly with the action as description
+        parsed = parse_delegation_action(delegation.action, tool_hint=delegation.tool)
+    if not parsed:
         parsed = {
             "tool": delegation.tool,
             "action": _guess_action(delegation.tool, delegation.action),

@@ -6,14 +6,14 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import OrgContext, get_org_context
 from app.db.session import get_db
-from app.api.deps import get_org_context, OrgContext
 from app.services.notification_service import (
-    get_notifications,
-    unread_count,
-    mark_read,
-    mark_all_read,
     dismiss_notification,
+    get_notifications,
+    mark_all_read,
+    mark_read,
+    unread_count,
 )
 
 router = APIRouter()

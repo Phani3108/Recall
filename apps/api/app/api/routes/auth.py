@@ -1,13 +1,9 @@
-import uuid
-from datetime import datetime, UTC
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.db.models import User, Organization, OrgMembership, OrgRole
 from app.api.deps import create_access_token, get_current_user
 from app.api.schemas import (
     LoginRequest,
@@ -15,6 +11,8 @@ from app.api.schemas import (
     TokenResponse,
     UserResponse,
 )
+from app.db.models import Organization, OrgMembership, OrgRole, User
+from app.db.session import get_db
 
 router = APIRouter()
 

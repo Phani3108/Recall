@@ -1,28 +1,28 @@
 import json
 import logging
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.api.deps import OrgContext, get_org_context
+from app.api.schemas import IntegrationConnect, IntegrationCreate, IntegrationResponse
 from app.db.models import Integration, IntegrationProvider, IntegrationStatus
-from app.api.deps import get_org_context, OrgContext
-from app.api.schemas import IntegrationCreate, IntegrationConnect, IntegrationResponse
-from app.services.sync_service import validate_and_sync, PROVIDER_FIELDS, PROVIDER_HELP_URLS
+from app.db.session import get_db
 from app.services.oauth_service import (
-    generate_auth_url,
-    exchange_code,
-    verify_oauth_state,
-    is_oauth_configured,
-    get_provider_auth_method,
-    OAUTH_PROVIDERS,
     API_KEY_PROVIDERS,
     COMING_SOON_PROVIDERS,
+    OAUTH_PROVIDERS,
+    exchange_code,
+    generate_auth_url,
+    get_provider_auth_method,
+    is_oauth_configured,
+    verify_oauth_state,
 )
+from app.services.sync_service import PROVIDER_FIELDS, PROVIDER_HELP_URLS, validate_and_sync
 
 logger = logging.getLogger(__name__)
 

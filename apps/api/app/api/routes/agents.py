@@ -12,16 +12,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db, async_session_factory
-from app.db.models import Conversation, Message, AuditLog, AuditAction, Organization
-from app.api.deps import get_org_context, OrgContext
+from app.api.deps import OrgContext, get_org_context
 from app.api.schemas import (
     ConversationCreate,
     ConversationResponse,
     MessageCreate,
     MessageResponse,
 )
-from app.services.llm_service import chat, chat_stream, ConversationMessage
+from app.db.models import AuditAction, AuditLog, Conversation, Message, Organization
+from app.db.session import async_session_factory, get_db
+from app.services.llm_service import ConversationMessage, chat, chat_stream
 
 logger = logging.getLogger(__name__)
 

@@ -3,25 +3,24 @@
 Provides weekly/monthly breakdowns and trend data for the executive dashboard.
 """
 
-import uuid
 import logging
-from datetime import datetime, UTC, timedelta
+import uuid
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, func, case, extract
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AgentProposal,
     AuditLog,
-    AuditAction,
-    Task,
-    TaskStatus,
+    ContextEntity,
+    Conversation,
     Delegation,
     DelegationStatus,
     Integration,
-    Conversation,
     Message,
-    AgentProposal,
-    ContextEntity,
+    Task,
+    TaskStatus,
 )
 
 logger = logging.getLogger(__name__)
